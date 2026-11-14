@@ -8,13 +8,17 @@ The archive cache defaults to `%TEMP%\martian-nav\mars_nomenclature_center_pts.z
 
 ### Run locally on Windows
 
+For a one-click launch, double-click [`start-mars-map.bat`](./start-mars-map.bat). It reuses a compatible running server or starts the app, waits for the API, then opens the site in your browser. The server runs in its own console window; close that window to stop it.
+
+To start it manually:
+
 ```powershell
 cd mars-map-app
 python -m pip install -r requirements.txt
 python app.py
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The complete catalog is also available at `/api/locations`.
+The site is at [http://127.0.0.1:8000](http://127.0.0.1:8000). The complete catalog is also available at `/api/locations`.
 
 ### Run catalog parser tests
 

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import app
 
 
-def make_gazetteer_archive():
+def make_gazetteer_archive(duplicate_record=False):
     shp = io.BytesIO()
     shx = io.BytesIO()
     dbf = io.BytesIO()
@@ -27,7 +27,7 @@ def make_gazetteer_archive():
     writer.field("quad_name", "C", size=40)
     writer.field("link", "C", size=120)
     writer.point(190, 15)
-    writer.record(
+    record = (
         "Crater Alpha",
         "Crater Alpha",
         "2001-01-02",
@@ -40,6 +40,10 @@ def make_gazetteer_archive():
         "Quadrangle A",
         "https://planetarynames.wr.usgs.gov/Feature/123",
     )
+    writer.record(*record)
+    if duplicate_record:
+        writer.point(190, 15)
+        writer.record(*record)
     writer.close()
 
     payload = io.BytesIO()
@@ -78,6 +82,14 @@ class GazetteerParserTests(unittest.TestCase):
             pass
         with self.assertRaisesRegex(ValueError, "missing shapefile components"):
             app.parse_gazetteer_archive(empty_archive.getvalue())
+
+    def test_deduplicates_identical_feature_rows(self):
+        locations = app.parse_gazetteer_archive(
+            make_gazetteer_archive(duplicate_record=True)
+        )
+
+        self.assertEqual(len(locations), 1)
+        self.assertEqual(locations[0]["id"], "usgs-123")
 
 
 if __name__ == "__main__":

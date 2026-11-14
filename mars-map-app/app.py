@@ -258,6 +258,7 @@ def parse_gazetteer_archive(payload):
                 raise ValueError("Gazetteer archive is missing required attributes")
 
             locations = []
+            locations_by_id = {}
             for record in reader.iterRecords():
                 attributes = dict(zip(field_names, record))
                 name = str(attributes.get("clean_name") or attributes["name"]).strip()
@@ -281,28 +282,35 @@ def parse_gazetteer_archive(payload):
                 except (TypeError, ValueError):
                     diameter = None
 
-                locations.append(
-                    {
-                        "id": f"usgs-{feature_match.group(1)}",
-                        "name": name,
-                        "mission": None,
-                        "lat": lat,
-                        "lon": lon,
-                        "elev": None,
-                        "water_summary": None,
-                        "minerals": [],
-                        "image_2d": None,
-                        "feature_type": str(attributes.get("type") or "").strip() or None,
-                        "origin": str(attributes.get("origin") or "").strip() or None,
-                        "diameter_km": diameter,
-                        "approval_date": str(attributes.get("approvaldt") or "").strip() or None,
-                        "approval_status": str(attributes.get("approval") or "").strip() or None,
-                        "quadrangle": str(attributes.get("quad_name") or "").strip() or None,
-                        "source_url": link.replace("http://", "https://", 1),
-                        "featured": False,
-                        "featured_category": None,
-                    }
-                )
+                location = {
+                    "id": f"usgs-{feature_match.group(1)}",
+                    "name": name,
+                    "mission": None,
+                    "lat": lat,
+                    "lon": lon,
+                    "elev": None,
+                    "water_summary": None,
+                    "minerals": [],
+                    "image_2d": None,
+                    "feature_type": str(attributes.get("type") or "").strip() or None,
+                    "origin": str(attributes.get("origin") or "").strip() or None,
+                    "diameter_km": diameter,
+                    "approval_date": str(attributes.get("approvaldt") or "").strip() or None,
+                    "approval_status": str(attributes.get("approval") or "").strip() or None,
+                    "quadrangle": str(attributes.get("quad_name") or "").strip() or None,
+                    "source_url": link.replace("http://", "https://", 1),
+                    "featured": False,
+                    "featured_category": None,
+                }
+                previous = locations_by_id.get(location["id"])
+                if previous is not None:
+                    if previous != location:
+                        raise ValueError(
+                            f"Gazetteer contains conflicting records for {location['id']}"
+                        )
+                    continue
+                locations_by_id[location["id"]] = location
+                locations.append(location)
         finally:
             reader.close()
 
