@@ -159,6 +159,11 @@ controls.maxDistance = 20.0;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.45;
 
+const scaleLabel = document.getElementById("hud-scale-val");
+const scaleBar = document.getElementById("hud-scale-bar");
+let currentScaleKm = null;
+let currentScaleWidth = 0;
+
 // Cancel fly-to animation immediately if user interacts manually
 renderer.domElement.addEventListener("pointerdown", () => {
   targetCamPos = null;
@@ -181,7 +186,7 @@ const texLoader = new THREE.TextureLoader();
 texLoader.setCrossOrigin("anonymous");
 
 const marsMaterial = new THREE.MeshStandardMaterial({
-  color: 0xd97742, // Warm Martian fallback tint before texture loads
+  color: 0xa65337, // Warm Martian fallback tint before texture loads
   roughness: 0.85,
   metalness: 0.05
 });
@@ -511,10 +516,6 @@ function selectLocation(loc, fly3D = true) {
     Number.isFinite(loc.elev) ? `${loc.elev} m` : "N/A";
 
   document.getElementById("loc-title").textContent = loc.name;
-  const missionLabel = document.getElementById("loc-mission");
-  missionLabel.textContent = loc.mission || loc.feature_type || "Mars feature";
-  missionLabel.classList.toggle("hidden", !loc.mission && !loc.feature_type);
-
   const imageCard = document.getElementById("loc-image-card");
   const image = document.getElementById("loc-img");
   const imageLink = document.getElementById("loc-img-link");
@@ -699,27 +700,12 @@ function updateLeftColumnLayout() {
   pane2D.style.flex = mapVisible && !sidebarVisible ? "1 1 100%" : "";
 }
 
-document.getElementById("btn-toggle-container").addEventListener("click", toggleMainContainer);
 document.getElementById("act-map-btn").addEventListener("click", toggleMainContainer);
 document.getElementById("btn-tab-close").addEventListener("click", toggleMainContainer);
 document.getElementById("btn-reopen-container").addEventListener("click", toggleMainContainer);
 
-document.getElementById("btn-toggle-sidebar").addEventListener("click", toggleSidebar);
 document.getElementById("act-data-btn").addEventListener("click", toggleSidebar);
 document.getElementById("btn-close-sidebar").addEventListener("click", toggleSidebar);
-
-document.getElementById("btn-split-equal").addEventListener("click", () => {
-  pane2D.classList.remove("hidden");
-  pane2DVisible = true;
-  updateLeftColumnLayout();
-  leftColumn.style.flexBasis = "50%";
-});
-
-document.getElementById("btn-toggle-2d").addEventListener("click", () => {
-  const isHidden = pane2D.classList.toggle("hidden");
-  pane2DVisible = !isHidden;
-  updateLeftColumnLayout();
-});
 
 document.getElementById("btn-auto-rotate").addEventListener("click", () => {
   controls.autoRotate = !controls.autoRotate;
@@ -743,10 +729,29 @@ function animate() {
 
   controls.update();
 
-  // Update dynamic scale bar in bottom-left HUD
-  const distFromSurface = Math.max(0.5, camera.position.length() - MARS_RADIUS);
-  const scaleKm = Math.round(distFromSurface * 210);
-  document.getElementById("hud-scale-val").textContent = `${scaleKm} km`;
+  // Keep the scale bar near 140 px and use familiar 1-2-5 distance steps.
+  const viewWidthKm =
+    2 *
+    Math.max(0.1, camera.position.length() - MARS_RADIUS) *
+    Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) *
+    camera.aspect *
+    1000;
+  const kmPerPixel = viewWidthKm / Math.max(1, container3D.clientWidth);
+  const scaleMagnitude = Math.pow(10, Math.floor(Math.log10(kmPerPixel * 140)));
+  const scaleFraction = (kmPerPixel * 140) / scaleMagnitude;
+  const scaleStep = scaleFraction >= 5 ? 5 : scaleFraction >= 2 ? 2 : 1;
+  const scaleKm = scaleStep * scaleMagnitude;
+  const targetScaleWidth = Math.min(140, scaleKm / kmPerPixel);
+
+  if (scaleKm !== currentScaleKm) {
+    currentScaleKm = scaleKm;
+    scaleLabel.textContent = `${new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: scaleKm < 10 ? 1 : 0
+    }).format(scaleKm)} km`;
+  }
+  if (currentScaleWidth === 0) currentScaleWidth = targetScaleWidth;
+  else currentScaleWidth += (targetScaleWidth - currentScaleWidth) * 0.18;
+  scaleBar.style.width = `${currentScaleWidth.toFixed(1)}px`;
 
   renderer.render(scene, camera);
 }

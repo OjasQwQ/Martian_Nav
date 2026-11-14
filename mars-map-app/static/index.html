@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mars Field Atlas | Surface Operations</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <!-- TailwindCSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -24,6 +27,9 @@
       --rule: #4a4945;
       --paper: #b19b78;
       --night: #050608;
+      --rust: #a65337;
+      --rust-light: #bd7452;
+      --rust-dark: #713923;
     }
 
     * { box-sizing: border-box; }
@@ -31,7 +37,7 @@
     body {
       background-color: var(--night);
       color: var(--ink);
-      font: 13px Tahoma, "Segoe UI", sans-serif;
+      font: 13px Inter, "Segoe UI", sans-serif;
       overflow: hidden;
       user-select: none;
     }
@@ -72,8 +78,20 @@
     }
 
     header > div:first-child > span:first-child {
-      color: var(--paper) !important;
+      color: var(--rust-light) !important;
       letter-spacing: .08em;
+    }
+
+    .text-orange-500,
+    .text-orange-400,
+    .text-orange-300 { color: var(--rust-light) !important; }
+    .bg-orange-500 { background-color: var(--rust) !important; }
+    .bg-orange-600 { background-color: var(--rust-dark) !important; }
+    .bg-orange-500\/20 { background-color: rgba(166, 83, 55, .2) !important; }
+    .border-orange-500,
+    .border-orange-400 { border-color: var(--rust-light) !important; }
+    .hover\:border-orange-500\/50:hover {
+      border-color: rgba(189, 116, 82, .5) !important;
     }
 
     #dataset-sidebar {
@@ -130,27 +148,16 @@
     }
 
     #loc-title { color: #e0ddd4 !important; }
-    #mars-project-container > div:first-child span:first-child {
-      background-color: var(--paper) !important;
-      border-radius: 0 !important;
-    }
     #hud-lat,
     #hud-lon,
     #hud-elev,
     #gps-badge,
     #loc-minerals span { color: #c2b69e !important; }
-    #loc-mission {
-      background: #171714 !important;
-      border-color: #716957 !important;
-      color: #c2b69e !important;
-      border-radius: 0 !important;
-    }
-
     label,
     #pane-2d > div:first-child span,
     #pane-2d > div:last-child > div > div:first-child,
     #pane-2d > div:last-child > div > span {
-      color: var(--paper) !important;
+      color: var(--rust-light) !important;
     }
 
     button,
@@ -159,7 +166,7 @@
       border: 1px solid #e1ded5 !important;
       background: #c5c2ba !important;
       color: #111 !important;
-      font: 12px Tahoma, "Segoe UI", sans-serif !important;
+      font: 12px Inter, "Segoe UI", sans-serif !important;
       box-shadow: inset 1px 1px #fff, inset -1px -1px #77736a;
       transition: background-color .12s ease;
     }
@@ -181,6 +188,19 @@
     }
 
     a { color: #c2aa81 !important; }
+
+    #hud-scale-val,
+    #hud-scale-zero { color: #fff !important; }
+    #hud-scale-bar {
+      width: 0;
+      border-color: #fff !important;
+      background-color: rgba(255, 255, 255, .16) !important;
+      transition: none;
+    }
+
+    .leaflet-container,
+    .leaflet-control,
+    .leaflet-control * { font-family: Inter, "Segoe UI", sans-serif !important; }
 
     .vscode-resizer {
       width: 6px;
@@ -254,7 +274,6 @@
       }
       header { gap: 6px; }
       header > div:first-child > span:nth-child(3) { display: none; }
-      header > div:last-child { gap: 4px; }
     }
   </style>
 </head>
@@ -264,18 +283,9 @@
   <!-- Mission title bar -->
   <header class="h-8 bg-[#1e1e24] border-b border-zinc-800 flex items-center justify-between px-3 text-xs text-zinc-400 shrink-0">
     <div class="flex items-center space-x-2">
-      <img src="./terra-explorers-logo.png" alt="Terra Explorers" class="h-7 w-9 object-contain" />
       <span class="font-bold text-orange-500">MARS FIELD ATLAS</span>
       <span class="text-zinc-600">|</span>
       <span class="text-zinc-300">Surface Operations // Jezero Quadrangle</span>
-    </div>
-    <div class="flex items-center space-x-2">
-      <button id="btn-toggle-sidebar" class="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded border border-zinc-700">
-        Data Index
-      </button>
-      <button id="btn-toggle-container" class="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded border border-zinc-700">
-        Map Window
-      </button>
     </div>
   </header>
 
@@ -289,7 +299,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
       </button>
-      <button id="act-data-btn" title="NASA Datasets List" class="p-2 rounded text-zinc-400 hover:text-zinc-100">
+      <button id="act-data-btn" title="Map Info" class="p-2 rounded text-zinc-400 hover:text-zinc-100">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
         </svg>
@@ -301,7 +311,7 @@
         <!-- NASA datasets and layer switcher -->
         <aside id="dataset-sidebar" class="bg-[#1e1e24] flex flex-col text-xs shrink-0 overflow-hidden">
           <div class="px-3 py-2 font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800 flex justify-between items-center shrink-0">
-            <span>DATA INDEX</span>
+            <span class="normal-case">Map Info</span>
             <button id="btn-close-sidebar" class="hover:text-white">✕</button>
           </div>
           <div class="p-3 space-y-4 overflow-y-auto flex-1 min-h-0">
@@ -335,14 +345,11 @@
 
         <!-- 2D MAP AND LOCATION DETAILS -->
         <div id="pane-2d" class="flex flex-col bg-[#141418] overflow-y-auto">
-          <div class="p-3 bg-[#18181b] border-b border-zinc-800 flex items-center justify-between sticky top-0 z-20 shrink-0">
+          <div class="p-3 bg-[#18181b] border-b border-zinc-800 flex items-start justify-start sticky top-0 z-20 shrink-0">
             <div>
               <span class="text-[10px] uppercase tracking-wider text-orange-400 font-bold block">Orbital Survey // 2D</span>
               <h2 id="loc-title" class="text-sm font-bold text-white">Jezero Crater: Margin Unit</h2>
             </div>
-            <span id="loc-mission" class="text-[11px] bg-orange-500/20 text-orange-300 border border-orange-500/40 px-2 py-0.5 rounded">
-              Mars 2020 Perseverance
-            </span>
           </div>
 
           <div class="relative w-full h-64 border-b border-zinc-800 shrink-0">
@@ -393,20 +400,10 @@
     <main id="mars-project-container" class="flex-1 flex flex-col bg-[#121215] overflow-hidden">
 
       <!-- TAB BAR -->
-      <div class="h-9 bg-[#18181b] border-b border-zinc-800 flex items-center justify-between px-2 shrink-0">
-        <div class="flex items-center">
-          <div class="flex items-center space-x-2 px-3 py-1.5 bg-[#121215] border-t-2 border-orange-500 text-xs text-zinc-100 rounded-t">
-            <span class="w-2 h-2 rounded-full bg-orange-500"></span>
-            <span>FIELD MAP</span>
-            <button id="btn-tab-close" class="ml-2 text-zinc-500 hover:text-zinc-200" title="Hide Tab">✕</button>
-          </div>
-        </div>
+      <div id="field-map-heading" class="h-9 w-full bg-[#18181b] border-b border-zinc-800 flex items-center justify-between px-3 shrink-0">
+        <h2 class="text-xs font-semibold tracking-wider text-zinc-100">FIELD MAP</h2>
+        <button id="btn-tab-close" class="text-zinc-500 hover:text-zinc-200" title="Hide Field Map">✕</button>
 
-        <!-- SPLIT VIEW CONTROLS -->
-        <div class="flex items-center space-x-1.5 text-xs text-zinc-300">
-          <button id="btn-split-equal" class="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded">50:50 Split</button>
-          <button id="btn-toggle-2d" class="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded">Hide/Show 2D Pane</button>
-        </div>
       </div>
 
       <div id="split-workspace" class="flex-1 overflow-hidden relative">
@@ -435,7 +432,7 @@
           <div id="three-canvas-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
 
           <!-- COORDINATES HUD -->
-          <div id="coordinate-hud" class="absolute bottom-3 right-3 z-20 text-xs font-mono space-y-1 pointer-events-none">
+          <div id="coordinate-hud" class="absolute bottom-3 right-3 z-20 text-xs space-y-1 pointer-events-none">
             <div class="grid grid-cols-2 gap-x-3 text-[11px]">
               <span class="text-zinc-400">LAT:</span>
               <span id="hud-lat" class="text-emerald-400 font-semibold">18.4447° N</span>
@@ -446,10 +443,10 @@
             </div>
             <div class="pt-1">
               <div class="flex justify-between text-[10px] text-zinc-400 mb-0.5">
-                <span>0 km</span>
+                <span id="hud-scale-zero">0 km</span>
                 <span id="hud-scale-val">500 km</span>
               </div>
-              <div class="w-28 h-1.5 border-b-2 border-l-2 border-r-2 border-orange-400 bg-orange-500/20"></div>
+              <div id="hud-scale-bar" class="h-1.5 border-b-2 border-l-2 border-r-2"></div>
             </div>
           </div>
 

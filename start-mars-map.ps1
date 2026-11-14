@@ -28,13 +28,21 @@ if (-not $api) {
     throw "Port 8000 is occupied by an older or incompatible app. Stop that server, then run this launcher again."
   }
 
-  $python = Get-Command python -ErrorAction SilentlyContinue
-  if (-not $python) {
+  $venvPython = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+  if (Test-Path $venvPython) {
+    $pythonPath = $venvPython
+  } else {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) {
+      $pythonPath = $python.Source
+    }
+  }
+  if (-not $pythonPath) {
     throw "Python was not found. Install Python and the packages in mars-map-app\requirements.txt first."
   }
 
   $server = Start-Process `
-    -FilePath $python.Source `
+    -FilePath $pythonPath `
     -ArgumentList "app.py" `
     -WorkingDirectory $appDirectory `
     -PassThru
