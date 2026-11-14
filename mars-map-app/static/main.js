@@ -66,7 +66,10 @@ let marsLocations = [];
 const MARS_RADIUS = 3.3895; // 3,389.5 km scaled
 let targetCamPos = null;
 const markerMeshes = [];
-const leafletMarkers = {};
+const locationMarkers = {};
+let activeTransientMarkerId = null;
+let selectedLocationId = null;
+let missionHighlights = [];
 
 // ==========================================
 // 1. INITIALIZE 2D LEAFLET MAP (NASA WMTS)
@@ -254,65 +257,247 @@ renderer.domElement.addEventListener("click", (e) => {
 // ==========================================
 // 3. FETCH & RENDER NASA DATASET LOCATIONS
 // ==========================================
+const locationsApiUrl =
+  window.location.protocol === "file:"
+    ? "http://127.0.0.1:8000/api/locations"
+    : "/api/locations";
+
 async function loadLocations() {
+  let loadMessage = "";
   try {
-    const res = await fetch("/api/locations");
-    if (!res.ok) throw new Error("Using local fallback");
+    const res = await fetch(locationsApiUrl);
+    if (!res.ok) throw new Error(`Location API returned HTTP ${res.status}`);
     const data = await res.json();
-    marsLocations = data.locations;
-  } catch {
-    marsLocations = FALLBACK_LOCATIONS;
+    if (!data || !Array.isArray(data.locations)) {
+      throw new Error("Location API response must contain a locations array");
+    }
+
+    const ids = new Set();
+    marsLocations = data.locations.map((loc, index) => {
+      if (
+        !loc ||
+        typeof loc.id !== "string" ||
+        typeof loc.name !== "string" ||
+        !Number.isFinite(loc.lat) ||
+        loc.lat < -90 ||
+        loc.lat > 90 ||
+        !Number.isFinite(loc.lon) ||
+        loc.lon < -180 ||
+        loc.lon > 180 ||
+        (loc.elev != null && !Number.isFinite(loc.elev)) ||
+        !Array.isArray(loc.minerals) ||
+        !loc.minerals.every((mineral) => typeof mineral === "string") ||
+        (loc.featured !== undefined && typeof loc.featured !== "boolean") ||
+        (loc.diameter_km != null && !Number.isFinite(loc.diameter_km))
+      ) {
+        throw new Error(`Location API returned an invalid location at index ${index}`);
+      }
+
+      const optionalTextFields = [
+        "mission",
+        "water_summary",
+        "image_2d",
+        "feature_type",
+        "origin",
+        "approval_date",
+        "approval_status",
+        "quadrangle",
+        "source_url",
+        "featured_category"
+      ];
+      if (optionalTextFields.some((field) => loc[field] != null && typeof loc[field] !== "string")) {
+        throw new Error(`Location API returned invalid text metadata at index ${index}`);
+      }
+      if (ids.has(loc.id)) throw new Error(`Location API returned duplicate ID "${loc.id}"`);
+      ids.add(loc.id);
+      return loc;
+    });
+
+    if (data.warning != null && typeof data.warning !== "string") {
+      throw new Error("Location API warning must be a string");
+    }
+    if (
+      data.mission_highlights != null &&
+      (!Array.isArray(data.mission_highlights) ||
+        data.mission_highlights.some(
+          (highlight) =>
+            !highlight ||
+            typeof highlight.name !== "string" ||
+            typeof highlight.summary !== "string" ||
+            (highlight.location_id != null && typeof highlight.location_id !== "string")
+        ))
+    ) {
+      throw new Error("Location API returned invalid mission highlights");
+    }
+    missionHighlights = data.mission_highlights || [];
+    if (data.warning) loadMessage = data.warning;
+  } catch (error) {
+    console.error(`Unable to load locations from ${locationsApiUrl}.`, error);
+    marsLocations = FALLBACK_LOCATIONS.map((loc) => ({ ...loc, featured: true }));
+    missionHighlights = [];
+    const reason = error instanceof Error ? error.message : String(error);
+    loadMessage = `Location API unavailable (${reason}); showing ${marsLocations.length} bundled locations.`;
   }
 
+  document.getElementById("location-search").addEventListener("input", () => {
+    renderLocationList(loadMessage);
+  });
+  renderLocationList(loadMessage);
+  renderMissionHighlights();
+
+  marsLocations
+    .filter((loc) => loc.featured)
+    .slice(0, 20)
+    .forEach((loc) => addLocationMarker(loc, true));
+
+  const initialLocation =
+    marsLocations.find((loc) => loc.id === "jezero-margin-unit") ||
+    marsLocations.find((loc) => loc.featured) ||
+    marsLocations[0];
+  if (initialLocation) selectLocation(initialLocation, false);
+}
+
+function renderLocationList(message = "") {
   const listEl = document.getElementById("location-list");
-  listEl.innerHTML = "";
-
-  marsLocations.forEach((loc) => {
-    // 1. Sidebar Button
-    const btn = document.createElement("button");
-    btn.className =
-      "w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-orange-500/50 transition";
-    btn.innerHTML = `
-      <div class="font-semibold text-zinc-200 truncate">${loc.name}</div>
-      <div class="text-[10px] text-zinc-400">${loc.lat.toFixed(2)}°, ${loc.lon.toFixed(2)}°</div>
-    `;
-    btn.addEventListener("click", () => selectLocation(loc));
-    listEl.appendChild(btn);
-
-    // 2. 3D Globe Pin
-    const pin = new THREE.Mesh(
-      new THREE.SphereGeometry(0.08, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xb19b78 })
-    );
-    pin.position.copy(latLonToVec3(loc.lat, loc.lon, MARS_RADIUS + 0.04));
-    pin.userData = loc;
-    globeGroup.add(pin);
-    markerMeshes.push(pin);
-
-    // 3. 2D Leaflet Marker
-    const marker2d = L.circleMarker([loc.lat, loc.lon], {
-      radius: 7,
-      color: "#b19b78",
-      fillColor: "#b19b78",
-      fillOpacity: 0.78
-    })
-      .addTo(map2D)
-      .bindPopup(`<b>${loc.name}</b><br>${loc.mission}`);
-
-    marker2d.on("click", () => selectLocation(loc));
-    leafletMarkers[loc.id] = marker2d;
+  const countEl = document.getElementById("location-count");
+  const query = document.getElementById("location-search").value.trim().toLocaleLowerCase();
+  const matches = marsLocations.filter((loc) => {
+    const fields = [
+      loc.name,
+      loc.mission,
+      loc.feature_type,
+      loc.origin,
+      loc.approval_status,
+      loc.approval_date,
+      loc.quadrangle,
+      loc.featured_category
+    ];
+    return !query || fields.some((value) => value && value.toLocaleLowerCase().includes(query));
   });
 
-  // Load initial location without stopping auto-spin
-  if (marsLocations.length > 0) {
-    selectLocation(marsLocations[0], false);
+  listEl.replaceChildren();
+  countEl.textContent = `${matches.length.toLocaleString()} of ${marsLocations.length.toLocaleString()} locations${
+    message ? ` — ${message}` : ""
+  }`;
+
+  if (matches.length === 0) {
+    const emptyState = document.createElement("p");
+    emptyState.className = "px-2 py-1 text-[10px] text-zinc-400";
+    emptyState.textContent = "No matching locations.";
+    listEl.appendChild(emptyState);
+    return;
   }
+
+  const fragment = document.createDocumentFragment();
+  matches.forEach((loc) => {
+    const btn = document.createElement("button");
+    btn.className = `w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border ${
+      selectedLocationId === loc.id ? "border-orange-400" : "border-zinc-800"
+    } hover:border-orange-500/50 transition`;
+    btn.dataset.locationId = loc.id;
+    btn.setAttribute("aria-pressed", selectedLocationId === loc.id ? "true" : "false");
+    const name = document.createElement("div");
+    name.className = "font-semibold text-zinc-200 truncate";
+    name.textContent = loc.name;
+    const coordinates = document.createElement("div");
+    coordinates.className = "text-[10px] text-zinc-400";
+    coordinates.textContent = `${loc.lat.toFixed(2)}°, ${loc.lon.toFixed(2)}°`;
+    const metadata = document.createElement("div");
+    metadata.className = "text-[10px] text-zinc-500 truncate";
+    metadata.textContent = loc.featured
+      ? loc.featured_category || "Featured location"
+      : loc.feature_type || "Mars feature";
+    btn.append(name, coordinates, metadata);
+    btn.addEventListener("click", () => selectLocation(loc));
+    fragment.appendChild(btn);
+  });
+  listEl.appendChild(fragment);
+}
+
+function renderMissionHighlights() {
+  const listEl = document.getElementById("mission-highlight-list");
+  listEl.replaceChildren();
+  missionHighlights.forEach((highlight) => {
+    const location = marsLocations.find((loc) => loc.id === highlight.location_id);
+    const item = location
+      ? document.createElement("button")
+      : document.createElement("div");
+    item.className = location
+      ? "w-full text-left p-2 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800"
+      : "p-2 rounded bg-zinc-900 border border-zinc-800";
+    const name = document.createElement("div");
+    name.className = "font-semibold text-zinc-200";
+    name.textContent = highlight.name;
+    const summary = document.createElement("div");
+    summary.className = "text-[10px] text-zinc-400";
+    summary.textContent = highlight.summary;
+    item.append(name, summary);
+    if (location) item.addEventListener("click", () => selectLocation(location));
+    listEl.appendChild(item);
+  });
+}
+
+function addLocationMarker(loc, featured = false) {
+  const pin = new THREE.Mesh(
+    new THREE.SphereGeometry(featured ? 0.075 : 0.095, 16, 16),
+    new THREE.MeshBasicMaterial({ color: featured ? 0xb19b78 : 0xe0d4bc })
+  );
+  pin.position.copy(latLonToVec3(loc.lat, loc.lon, MARS_RADIUS + 0.04));
+  pin.userData = loc;
+  globeGroup.add(pin);
+  markerMeshes.push(pin);
+
+  const popupContent = document.createElement("div");
+  const popupName = document.createElement("strong");
+  popupName.textContent = loc.name;
+  const popupMetadata = document.createElement("div");
+  popupMetadata.textContent = loc.mission || loc.feature_type || "Mars feature";
+  popupContent.append(popupName, popupMetadata);
+
+  const marker2d = L.circleMarker([loc.lat, loc.lon], {
+    radius: featured ? 5 : 8,
+    color: featured ? "#b19b78" : "#e0d4bc",
+    fillColor: featured ? "#b19b78" : "#e0d4bc",
+    fillOpacity: 0.85
+  })
+    .addTo(map2D)
+    .bindPopup(popupContent);
+  marker2d.on("click", () => selectLocation(loc));
+  locationMarkers[loc.id] = { pin, marker2d };
+}
+
+function removeTransientMarker() {
+  if (!activeTransientMarkerId) return;
+  const marker = locationMarkers[activeTransientMarkerId];
+  if (marker) {
+    map2D.removeLayer(marker.marker2d);
+    globeGroup.remove(marker.pin);
+    marker.pin.geometry.dispose();
+    marker.pin.material.dispose();
+    const markerIndex = markerMeshes.indexOf(marker.pin);
+    if (markerIndex !== -1) markerMeshes.splice(markerIndex, 1);
+    delete locationMarkers[activeTransientMarkerId];
+  }
+  activeTransientMarkerId = null;
 }
 
 function selectLocation(loc, fly3D = true) {
-  // Highlight selected 3D pin in green
-  markerMeshes.forEach((m) => {
-    m.material.color.setHex(m.userData.id === loc.id ? 0xe0d4bc : 0xb19b78);
+  if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lon)) return;
+  if (activeTransientMarkerId !== loc.id) removeTransientMarker();
+  if (!locationMarkers[loc.id]) {
+    addLocationMarker(loc);
+    activeTransientMarkerId = loc.id;
+  }
+
+  selectedLocationId = loc.id;
+  document.querySelectorAll("#location-list button[data-location-id]").forEach((button) => {
+    const selected = button.dataset.locationId === loc.id;
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+    button.classList.toggle("border-orange-400", selected);
+    button.classList.toggle("border-zinc-800", !selected);
+  });
+  markerMeshes.forEach((pin) => {
+    pin.material.color.setHex(pin.userData.id === loc.id ? 0xe0d4bc : 0xb19b78);
   });
 
   if (fly3D) {
@@ -322,26 +507,71 @@ function selectLocation(loc, fly3D = true) {
   }
 
   updateHUD(loc.lat, loc.lon, loc.elev);
+  document.getElementById("hud-elev").textContent =
+    Number.isFinite(loc.elev) ? `${loc.elev} m` : "N/A";
 
-  // Update 2D Info Panel
   document.getElementById("loc-title").textContent = loc.name;
-  document.getElementById("loc-mission").textContent = loc.mission;
-  document.getElementById("loc-img").src = loc.image_2d;
-  document.getElementById("loc-img-link").href = loc.image_2d;
-  document.getElementById("loc-water").textContent = loc.water_summary;
+  const missionLabel = document.getElementById("loc-mission");
+  missionLabel.textContent = loc.mission || loc.feature_type || "Mars feature";
+  missionLabel.classList.toggle("hidden", !loc.mission && !loc.feature_type);
+
+  const imageCard = document.getElementById("loc-image-card");
+  const image = document.getElementById("loc-img");
+  const imageLink = document.getElementById("loc-img-link");
+  imageCard.classList.toggle("hidden", !loc.image_2d);
+  image.src = loc.image_2d || "";
+  imageLink.href = loc.image_2d || "#";
+
+  const waterCard = document.getElementById("loc-water-card");
+  waterCard.classList.toggle("hidden", !loc.water_summary);
+  document.getElementById("loc-water").textContent = loc.water_summary || "";
 
   const minContainer = document.getElementById("loc-minerals");
-  minContainer.innerHTML = loc.minerals
-    .map(
-      (m) =>
-        `<span class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-orange-300">${m}</span>`
-    )
-    .join("");
+  document.getElementById("loc-minerals-card").classList.toggle(
+    "hidden",
+    loc.minerals.length === 0
+  );
+  minContainer.replaceChildren(
+    ...loc.minerals.map((mineral) => {
+      const mineralTag = document.createElement("span");
+      mineralTag.className =
+        "px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-orange-300";
+      mineralTag.textContent = mineral;
+      return mineralTag;
+    })
+  );
+
+  const detailFields = [
+    ["Feature type", loc.feature_type],
+    ["Diameter", Number.isFinite(loc.diameter_km) ? `${loc.diameter_km.toFixed(2)} km` : null],
+    ["Approval", loc.approval_status],
+    ["Approved", loc.approval_date],
+    ["Quadrangle", loc.quadrangle],
+    ["Named for", loc.origin]
+  ];
+  const detailContainer = document.getElementById("loc-gazetteer-details");
+  detailContainer.replaceChildren(
+    ...detailFields.filter(([, value]) => value).map(([label, value]) => {
+      const row = document.createElement("div");
+      const fieldLabel = document.createElement("span");
+      fieldLabel.className = "text-zinc-500";
+      fieldLabel.textContent = `${label}: `;
+      const fieldValue = document.createElement("span");
+      fieldValue.textContent = value;
+      row.append(fieldLabel, fieldValue);
+      return row;
+    })
+  );
+  const sourceLink = document.getElementById("loc-source-link");
+  sourceLink.classList.toggle("hidden", !loc.source_url);
+  sourceLink.href = loc.source_url || "#";
+  document.getElementById("loc-gazetteer-card").classList.toggle(
+    "hidden",
+    detailContainer.childElementCount === 0 && !loc.source_url
+  );
 
   map2D.flyTo([loc.lat, loc.lon], 6, { duration: 1.0 });
-  if (leafletMarkers[loc.id]) {
-    leafletMarkers[loc.id].openPopup();
-  }
+  locationMarkers[loc.id].marker2d.openPopup();
 }
 
 function updateHUD(lat, lon, elev) {
@@ -454,10 +684,19 @@ function toggleMainContainer() {
   } else {
     pane2D.classList.toggle("hidden", !pane2DVisible);
   }
+  updateLeftColumnLayout();
 }
 
 function toggleSidebar() {
-  document.getElementById("dataset-sidebar").classList.toggle("hidden");
+  datasetSidebar.classList.toggle("hidden");
+  updateLeftColumnLayout();
+}
+
+function updateLeftColumnLayout() {
+  const sidebarVisible = !datasetSidebar.classList.contains("hidden");
+  const mapVisible = !pane2D.classList.contains("hidden");
+  datasetSidebar.style.flex = sidebarVisible && !mapVisible ? "1 1 100%" : "";
+  pane2D.style.flex = mapVisible && !sidebarVisible ? "1 1 100%" : "";
 }
 
 document.getElementById("btn-toggle-container").addEventListener("click", toggleMainContainer);
@@ -471,13 +710,15 @@ document.getElementById("btn-close-sidebar").addEventListener("click", toggleSid
 
 document.getElementById("btn-split-equal").addEventListener("click", () => {
   pane2D.classList.remove("hidden");
-  datasetSidebar.style.flex = "";
+  pane2DVisible = true;
+  updateLeftColumnLayout();
   leftColumn.style.flexBasis = "50%";
 });
 
 document.getElementById("btn-toggle-2d").addEventListener("click", () => {
   const isHidden = pane2D.classList.toggle("hidden");
-  datasetSidebar.style.flex = isHidden ? "1 1 100%" : "";
+  pane2DVisible = !isHidden;
+  updateLeftColumnLayout();
 });
 
 document.getElementById("btn-auto-rotate").addEventListener("click", () => {
