@@ -63,7 +63,7 @@
     #empty-workspace,
     #split-workspace,
     #pane-3d,
-    #gps-badge,
+    #position-badge,
     #pane-2d,
     #pane-2d > div {
       background-color: rgba(5, 6, 8, .62) !important;
@@ -164,7 +164,7 @@
     #hud-lat,
     #hud-lon,
     #hud-elev,
-    #gps-badge,
+    #position-badge,
     #loc-minerals span { color: #c2b69e !important; }
     label,
     #pane-2d > div:first-child span,
@@ -358,7 +358,7 @@
         <div id="pane-2d" class="flex flex-col bg-[#141418] overflow-y-auto">
           <div id="pane-2d-header" class="p-3 bg-[#18181b] border-b border-zinc-800 flex items-start justify-start">
             <div>
-              <span class="text-[10px] uppercase tracking-wider text-orange-400 font-bold block">Orbital Survey</span>
+              <span class="text-[10px] uppercase tracking-wider text-orange-400 font-bold block">2D Surface Map</span>
               <h2 id="loc-title" class="text-sm font-bold text-white">Jezero Crater: Margin Unit</h2>
             </div>
           </div>
@@ -377,6 +377,26 @@
             </div>
 
             <div class="p-4 space-y-4 text-xs">
+              <section class="bg-zinc-900 border border-zinc-800 p-3 space-y-2" aria-labelledby="route-planner-title">
+                <h3 id="route-planner-title" class="text-[11px] font-bold text-orange-400 uppercase">Local Traverse Planner</h3>
+                <label for="route-destination" class="block text-[10px] text-zinc-400">Known destination</label>
+                <select id="route-destination" class="w-full bg-zinc-900 border border-zinc-700 p-1.5 text-zinc-200 text-xs"></select>
+                <button id="btn-plan-route" class="px-2 py-1 text-[11px]">Plan from current position</button>
+                <p id="route-plan-status" class="text-[10px] text-zinc-400" role="status" aria-live="polite">
+                  Set a Mars position and save a completed traverse to enable route recommendations.
+                </p>
+                <div class="border-t border-zinc-800 pt-2 space-y-1.5">
+                  <label for="traverse-name" class="block text-[10px] text-zinc-400">Record a completed walk</label>
+                  <input id="traverse-name" type="text" maxlength="60" class="w-full bg-zinc-900 border border-zinc-700 p-1.5 text-zinc-200 text-xs" placeholder="Traverse name" />
+                  <label class="flex items-start gap-1.5 text-[10px] text-zinc-400">
+                    <input id="traverse-completed" type="checkbox" class="mt-0.5" />
+                    I confirm this plotted traverse was completed.
+                  </label>
+                  <button id="btn-save-traverse" class="px-2 py-1 text-[11px]" disabled>Save completed walk</button>
+                  <div id="saved-traverse-list" class="space-y-1"></div>
+                </div>
+              </section>
+
               <div id="loc-water-card" class="bg-zinc-900 border border-zinc-800 rounded p-3 space-y-1.5">
                 <div class="text-[11px] font-bold text-orange-400 uppercase">Water & Geological Record</div>
                 <p id="loc-water" class="text-zinc-300 leading-relaxed"></p>
@@ -413,16 +433,25 @@
       <div id="split-workspace" class="flex-1 overflow-hidden relative">
         <div id="pane-3d" class="relative h-full">
 
-          <!-- TOP-LEFT: QUICK GPS ZOOM BUTTON -->
+          <!-- TOP-LEFT: MANUAL MARS POSITION -->
           <div class="absolute top-3 left-3 z-20 flex flex-col items-start space-y-1.5">
-            <button id="btn-gps-zoom" class="flex items-center space-x-2 bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded shadow-lg border border-orange-400/40 text-xs font-semibold transition">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
-              <span>Locate Coordinates</span>
-            </button>
-            <div id="gps-badge" class="hidden bg-zinc-900/90 border border-zinc-700 text-[11px] text-emerald-400 px-2.5 py-1 rounded"></div>
+            <div class="bg-zinc-900/90 border border-zinc-700 p-2 space-y-1.5">
+              <div class="text-[10px] uppercase tracking-wider text-orange-400 font-bold">Surface Position · Manual</div>
+              <div class="flex space-x-1.5">
+                <input id="position-lat" type="number" min="-90" max="90" step="any" aria-label="Mars latitude" placeholder="Latitude" class="w-24 bg-zinc-950 border border-zinc-700 px-1.5 py-1 text-xs text-zinc-100" />
+                <input id="position-lon" type="number" min="-180" max="180" step="any" aria-label="Mars longitude" placeholder="Longitude" class="w-24 bg-zinc-950 border border-zinc-700 px-1.5 py-1 text-xs text-zinc-100" />
+              </div>
+              <button id="btn-locate-coordinates" class="flex items-center space-x-2 bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded shadow-lg border border-orange-400/40 text-xs font-semibold transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span>Locate Coordinates</span>
+              </button>
+              <div id="position-badge" class="bg-zinc-900/90 text-[10px] text-emerald-400" role="status" aria-live="polite">
+                No Mars position set. Browser GPS is not used.
+              </div>
+            </div>
           </div>
 
           <!-- TOP-RIGHT: SPIN TOGGLE -->
@@ -460,7 +489,7 @@
 
     <!-- Hidden map window state -->
     <div id="empty-workspace" class="hidden flex-1 flex-col items-center justify-center bg-[#121215] text-zinc-500 space-y-3">
-        <p class="text-sm">FIELD MAP window is closed.</p>
+        <p class="text-sm">Map window is closed.</p>
       <button id="btn-reopen-container" class="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs font-semibold">
         Reopen Mars Map Container
       </button>

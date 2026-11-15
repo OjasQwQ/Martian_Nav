@@ -65,6 +65,8 @@ const FALLBACK_LOCATIONS = [
 let marsLocations = [];
 const MARS_RADIUS = 3.3895; // 3,389.5 km scaled
 let targetCamPos = null;
+let cameraTargetCallback = null;
+let currentMarsPosition = null;
 const markerMeshes = [];
 const locationMarkers = {};
 let activeTransientMarkerId = null;
@@ -105,12 +107,159 @@ document.getElementById("wmts-layer-select").addEventListener("change", (e) => {
 let drawingRoute = false;
 let routePoints = [];
 const routePolyline = L.polyline([], { color: "#b19b78", weight: 2, dashArray: "5, 6" }).addTo(map2D);
+const recommendedRoutePolyline = L.polyline([], {
+  color: "#bd7452",
+  weight: 3,
+  dashArray: "8, 5"
+}).addTo(map2D);
 
 const btnDrawRoute = document.getElementById("btn-draw-route");
 const btnClearRoute = document.getElementById("btn-clear-route");
+const btnSaveTraverse = document.getElementById("btn-save-traverse");
+const traverseCompletedCheckbox = document.getElementById("traverse-completed");
+const routePlanStatus = document.getElementById("route-plan-status");
+const TRAVERSE_STORAGE_KEY = "martian-nav-completed-traverses-v1";
+const MAX_SAVED_TRAVERSES = 50;
+const MAX_TRAVERSE_POINTS = 500;
+const ROUTE_SNAP_LIMIT_KM = 25;
+let savedTraverses = [];
+let routeStorageWarning = "";
+
+function isValidTraverse(traverse) {
+  return (
+    traverse &&
+    typeof traverse.id === "string" &&
+    typeof traverse.name === "string" &&
+    traverse.name.trim().length > 0 &&
+    traverse.completed === true &&
+    Array.isArray(traverse.points) &&
+    traverse.points.length >= 2 &&
+    traverse.points.length <= MAX_TRAVERSE_POINTS &&
+    traverse.points.every(
+      (point) =>
+        point &&
+        Number.isFinite(point.lat) &&
+        point.lat >= -90 &&
+        point.lat <= 90 &&
+        Number.isFinite(point.lon) &&
+        point.lon >= -180 &&
+        point.lon <= 180
+    )
+  );
+}
+
+function loadSavedTraverses() {
+  try {
+    const stored = localStorage.getItem(TRAVERSE_STORAGE_KEY);
+    if (!stored) return;
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Saved traverse data must be a list.");
+    }
+
+    savedTraverses = parsed.filter(isValidTraverse);
+    if (savedTraverses.length !== parsed.length) {
+      routeStorageWarning = "Some invalid saved traverses were ignored.";
+    }
+  } catch (error) {
+    console.error("Unable to load saved Mars traverses.", error);
+    routeStorageWarning = "Saved traverse history could not be read from this browser.";
+  }
+}
+
+function renderSavedTraverses() {
+  const list = document.getElementById("saved-traverse-list");
+  list.replaceChildren();
+  if (savedTraverses.length === 0) {
+    const emptyState = document.createElement("p");
+    emptyState.className = "text-[10px] text-zinc-500";
+    emptyState.textContent = "No completed walks saved in this browser.";
+    list.appendChild(emptyState);
+    return;
+  }
+
+  savedTraverses.forEach((traverse) => {
+    const item = document.createElement("div");
+    item.className = "text-[10px] text-zinc-300";
+    const distance = traverse.points.slice(1).reduce(
+      (sum, point, index) => sum + marsDistanceKm(traverse.points[index], point),
+      0
+    );
+    item.textContent = `${traverse.name} · ${distance.toFixed(1)} km`;
+    list.appendChild(item);
+  });
+}
+
+function updateTraverseSaveButton() {
+  btnSaveTraverse.disabled =
+    routePoints.length < 2 || !traverseCompletedCheckbox.checked;
+}
+
+function saveCompletedTraverse() {
+  const name = document.getElementById("traverse-name").value.trim();
+  if (routePoints.length < 2) {
+    routePlanStatus.textContent = "Plot at least two points before saving a completed walk.";
+    return;
+  }
+  if (!traverseCompletedCheckbox.checked) {
+    routePlanStatus.textContent = "Confirm that this plotted traverse was completed before saving.";
+    return;
+  }
+  if (!name) {
+    routePlanStatus.textContent = "Enter a name for this completed walk.";
+    return;
+  }
+  if (savedTraverses.length >= MAX_SAVED_TRAVERSES) {
+    routePlanStatus.textContent = `This browser has reached the ${MAX_SAVED_TRAVERSES}-walk storage limit.`;
+    return;
+  }
+  if (routePoints.length > MAX_TRAVERSE_POINTS) {
+    routePlanStatus.textContent = `A saved walk can contain at most ${MAX_TRAVERSE_POINTS} points.`;
+    return;
+  }
+
+  const traverse = {
+    id: `${Date.now()}-${savedTraverses.length}`,
+    name,
+    completed: true,
+    points: routePoints.map(([lat, lon]) => ({ lat, lon }))
+  };
+  const updatedTraverses = [...savedTraverses, traverse];
+  try {
+    localStorage.setItem(TRAVERSE_STORAGE_KEY, JSON.stringify(updatedTraverses));
+  } catch (error) {
+    console.error("Unable to save completed Mars traverse.", error);
+    routePlanStatus.textContent = "This browser could not save the traverse. Check local storage availability.";
+    return;
+  }
+
+  savedTraverses = updatedTraverses;
+  renderSavedTraverses();
+  routePlanStatus.textContent = `Saved "${name}" as a completed walk on this device.`;
+  document.getElementById("traverse-name").value = "";
+  traverseCompletedCheckbox.checked = false;
+  routePoints = [];
+  routePolyline.setLatLngs([]);
+  btnClearRoute.classList.add("hidden");
+  drawingRoute = false;
+  btnDrawRoute.textContent = "Plot Traverse: OFF";
+  updateTraverseSaveButton();
+}
+
+loadSavedTraverses();
+renderSavedTraverses();
+if (routeStorageWarning) routePlanStatus.textContent = routeStorageWarning;
 
 btnDrawRoute.addEventListener("click", () => {
   drawingRoute = !drawingRoute;
+  if (drawingRoute) {
+    routePoints = currentMarsPosition
+      ? [[currentMarsPosition.lat, currentMarsPosition.lon]]
+      : [];
+    routePolyline.setLatLngs(routePoints);
+    btnClearRoute.classList.toggle("hidden", routePoints.length === 0);
+    updateTraverseSaveButton();
+  }
   btnDrawRoute.textContent = `Plot Traverse: ${drawingRoute ? "ON (Click Map)" : "OFF"}`;
 });
 
@@ -118,13 +267,23 @@ btnClearRoute.addEventListener("click", () => {
   routePoints = [];
   routePolyline.setLatLngs([]);
   btnClearRoute.classList.add("hidden");
+  recommendedRoutePolyline.setLatLngs([]);
+  updateTraverseSaveButton();
 });
+
+btnSaveTraverse.addEventListener("click", saveCompletedTraverse);
+traverseCompletedCheckbox.addEventListener("change", updateTraverseSaveButton);
 
 map2D.on("click", (e) => {
   if (!drawingRoute) return;
+  if (routePoints.length >= MAX_TRAVERSE_POINTS) {
+    routePlanStatus.textContent = `A traverse can contain at most ${MAX_TRAVERSE_POINTS} points.`;
+    return;
+  }
   routePoints.push([e.latlng.lat, e.latlng.lng]);
   routePolyline.setLatLngs(routePoints);
   btnClearRoute.classList.remove("hidden");
+  updateTraverseSaveButton();
 });
 
 map2D.on("mousemove", (e) => {
@@ -167,9 +326,11 @@ let currentScaleWidth = 0;
 // Cancel fly-to animation immediately if user interacts manually
 renderer.domElement.addEventListener("pointerdown", () => {
   targetCamPos = null;
+  cameraTargetCallback = null;
 });
 renderer.domElement.addEventListener("wheel", () => {
   targetCamPos = null;
+  cameraTargetCallback = null;
 });
 
 // Scene Lights
@@ -208,13 +369,14 @@ const marsMesh = new THREE.Mesh(
 );
 globeGroup.add(marsMesh);
 
-// GPS Marker Pin (Blue)
-const gpsPin = new THREE.Mesh(
+// Current Mars position marker
+const currentPositionPin = new THREE.Mesh(
   new THREE.SphereGeometry(0.095, 16, 16),
-  new THREE.MeshBasicMaterial({ color: 0xc2b69e })
+  new THREE.MeshBasicMaterial({ color: 0xbd7452 })
 );
-gpsPin.visible = false;
-globeGroup.add(gpsPin);
+currentPositionPin.visible = false;
+globeGroup.add(currentPositionPin);
+let currentPositionMarker2D = null;
 
 // Convert (Lat, Lon) -> 3D Vector3
 function latLonToVec3(lat, lon, radius = MARS_RADIUS) {
@@ -349,6 +511,15 @@ async function loadLocations() {
   });
   renderLocationList(loadMessage);
   renderMissionHighlights();
+  renderRouteDestinations();
+  if (routeStorageWarning) {
+    routePlanStatus.textContent = routeStorageWarning;
+  } else if (savedTraverses.length === 0) {
+    routePlanStatus.textContent =
+      "Set a Mars position and save a completed traverse to enable route recommendations.";
+  } else {
+    routePlanStatus.textContent = `${savedTraverses.length} completed walk(s) available on this device.`;
+  }
 
   marsLocations
     .filter((loc) => loc.featured)
@@ -359,7 +530,9 @@ async function loadLocations() {
     marsLocations.find((loc) => loc.id === "jezero-margin-unit") ||
     marsLocations.find((loc) => loc.featured) ||
     marsLocations[0];
-  if (initialLocation) selectLocation(initialLocation, false);
+  if (initialLocation && !currentMarsPosition) {
+    selectLocation(initialLocation, false);
+  }
 }
 
 function renderLocationList(message = "") {
@@ -506,16 +679,21 @@ function selectLocation(loc, fly3D = true) {
   });
 
   if (fly3D) {
+    cameraTargetCallback = null;
     controls.autoRotate = false;
     document.getElementById("btn-auto-rotate").textContent = "Globe Rotation: OFF";
     targetCamPos = latLonToVec3(loc.lat, loc.lon, 5.5);
   }
 
-  updateHUD(loc.lat, loc.lon, loc.elev);
-  document.getElementById("hud-elev").textContent =
-    Number.isFinite(loc.elev) ? `${loc.elev} m` : "N/A";
+  if (!currentMarsPosition || fly3D) {
+    updateHUD(loc.lat, loc.lon, loc.elev);
+    document.getElementById("hud-elev").textContent =
+      Number.isFinite(loc.elev) ? `${loc.elev} m` : "N/A";
+  }
 
-  document.getElementById("loc-title").textContent = loc.name;
+  if (!currentMarsPosition || fly3D) {
+    document.getElementById("loc-title").textContent = loc.name;
+  }
   const waterCard = document.getElementById("loc-water-card");
   waterCard.classList.toggle("hidden", !loc.water_summary);
   document.getElementById("loc-water").textContent = loc.water_summary || "";
@@ -564,8 +742,10 @@ function selectLocation(loc, fly3D = true) {
     detailContainer.childElementCount === 0 && !loc.source_url
   );
 
-  map2D.flyTo([loc.lat, loc.lon], 6, { duration: 1.0 });
-  locationMarkers[loc.id].marker2d.openPopup();
+  if (!currentMarsPosition || fly3D) {
+    map2D.flyTo([loc.lat, loc.lon], 6, { duration: 1.0 });
+    locationMarkers[loc.id].marker2d.openPopup();
+  }
 }
 
 function updateHUD(lat, lon, elev) {
@@ -578,44 +758,199 @@ function updateHUD(lat, lon, elev) {
   }
 }
 
-// ==========================================
-// 4. TOP-LEFT GPS QUICK ZOOM
-// ==========================================
-document.getElementById("btn-gps-zoom").addEventListener("click", () => {
-  const badge = document.getElementById("gps-badge");
-  badge.classList.remove("hidden");
-  badge.textContent = "Acquiring GPS coordinates...";
+function formatMarsCoordinate(value, axis) {
+  return `${Math.abs(value).toFixed(4)}° ${value >= 0 ? (axis === "lat" ? "N" : "E") : axis === "lat" ? "S" : "W"}`;
+}
 
-  if ("geolocation" in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        lockGPSOnMars(pos.coords.latitude, pos.coords.longitude, "Live GPS Mapped");
-      },
-      () => {
-        // Fallback if browser blocks geolocation
-        lockGPSOnMars(18.4447, 77.4508, "Fallback: Jezero Beacon");
-      },
-      { timeout: 5000 }
-    );
-  } else {
-    lockGPSOnMars(18.4447, 77.4508, "Fallback: Jezero Beacon");
+function setManualMarsPosition() {
+  const latInput = document.getElementById("position-lat");
+  const lonInput = document.getElementById("position-lon");
+  const badge = document.getElementById("position-badge");
+  const inputs = [latInput, lonInput];
+  const rawValues = inputs.map((input) => input.value.trim());
+  const lat = Number(rawValues[0]);
+  const lon = Number(rawValues[1]);
+  const valid =
+    rawValues.every((value) => value !== "") &&
+    Number.isFinite(lat) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    Number.isFinite(lon) &&
+    lon >= -180 &&
+    lon <= 180;
+
+  inputs.forEach((input) => input.setAttribute("aria-invalid", valid ? "false" : "true"));
+  if (!valid) {
+    badge.textContent = "Enter a valid Mars latitude (-90 to 90) and longitude (-180 to 180).";
+    return;
   }
-});
 
-function lockGPSOnMars(lat, lon, sourceLabel) {
-  const badge = document.getElementById("gps-badge");
-  badge.textContent = `GPS: ${lat.toFixed(4)}°, ${lon.toFixed(4)}° (${sourceLabel})`;
+  currentMarsPosition = { lat, lon };
+  currentPositionPin.position.copy(latLonToVec3(lat, lon, MARS_RADIUS + 0.05));
+  currentPositionPin.visible = true;
 
-  gpsPin.position.copy(latLonToVec3(lat, lon, MARS_RADIUS + 0.05));
-  gpsPin.visible = true;
+  const positionPopup = document.createElement("span");
+  positionPopup.textContent = `Manually set astronaut position: ${formatMarsCoordinate(lat, "lat")}, ${formatMarsCoordinate(lon, "lon")}`;
+  if (!currentPositionMarker2D) {
+    currentPositionMarker2D = L.circleMarker([lat, lon], {
+      radius: 8,
+      color: "#e0d4bc",
+      weight: 2,
+      fillColor: "#bd7452",
+      fillOpacity: 1
+    }).addTo(map2D);
+  } else {
+    currentPositionMarker2D.setLatLng([lat, lon]);
+  }
+  currentPositionMarker2D.bindPopup(positionPopup);
 
+  badge.textContent = `Manual Mars position: ${formatMarsCoordinate(lat, "lat")}, ${formatMarsCoordinate(lon, "lon")}`;
+  document.getElementById("loc-title").textContent = "Manual Set Pos";
+  document.getElementById("loc-water-card").classList.add("hidden");
+  document.getElementById("loc-minerals-card").classList.add("hidden");
+  document.getElementById("loc-gazetteer-card").classList.add("hidden");
   controls.autoRotate = false;
   document.getElementById("btn-auto-rotate").textContent = "Globe Rotation: OFF";
   targetCamPos = latLonToVec3(lat, lon, 5.0);
+  cameraTargetCallback = () => {
+    const pane = document.getElementById("pane-2d");
+    if (pane.classList.contains("hidden")) {
+      pane.classList.remove("hidden");
+      pane2DVisible = true;
+      updateLeftColumnLayout();
+    }
+    map2D.invalidateSize();
+    map2D.flyTo([lat, lon], 6, { duration: 1.0 });
+    currentPositionMarker2D.openPopup();
+  };
 
-  map2D.flyTo([lat, lon], 6, { duration: 1.0 });
-  updateHUD(lat, lon, -2485);
+  updateHUD(lat, lon, null);
+  document.getElementById("hud-elev").textContent = "N/A";
 }
+
+document.getElementById("btn-locate-coordinates").addEventListener("click", setManualMarsPosition);
+
+function marsDistanceKm(first, second) {
+  const firstLat = Array.isArray(first) ? first[0] : first.lat;
+  const firstLon = Array.isArray(first) ? first[1] : first.lon;
+  const secondLat = Array.isArray(second) ? second[0] : second.lat;
+  const secondLon = Array.isArray(second) ? second[1] : second.lon;
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const latDelta = toRadians(secondLat - firstLat);
+  const lonDelta = toRadians(secondLon - firstLon);
+  const haversine =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(toRadians(firstLat)) *
+      Math.cos(toRadians(secondLat)) *
+      Math.sin(lonDelta / 2) ** 2;
+  return 2 * MARS_RADIUS * 1000 * Math.asin(Math.sqrt(haversine));
+}
+
+function renderRouteDestinations() {
+  const select = document.getElementById("route-destination");
+  select.replaceChildren();
+  const destinations = marsLocations.filter((location) => location.featured);
+  if (destinations.length === 0) {
+    const option = document.createElement("option");
+    option.textContent = "No known locations available";
+    option.value = "";
+    select.appendChild(option);
+    return;
+  }
+
+  destinations.forEach((location) => {
+    const option = document.createElement("option");
+    option.value = location.id;
+    option.textContent = location.name;
+    select.appendChild(option);
+  });
+}
+
+function findRouteRecommendation(start, destination) {
+  let bestRoute = null;
+  savedTraverses.forEach((traverse) => {
+    const points = traverse.points;
+    let nearestStart = { index: -1, distance: Infinity };
+    let nearestDestination = { index: -1, distance: Infinity };
+    points.forEach((point, index) => {
+      const startDistance = marsDistanceKm(start, point);
+      if (startDistance < nearestStart.distance) {
+        nearestStart = { index, distance: startDistance };
+      }
+      const destinationDistance = marsDistanceKm(destination, point);
+      if (destinationDistance < nearestDestination.distance) {
+        nearestDestination = { index, distance: destinationDistance };
+      }
+    });
+
+    if (
+      nearestStart.distance > ROUTE_SNAP_LIMIT_KM ||
+      nearestDestination.distance > ROUTE_SNAP_LIMIT_KM
+    ) {
+      return;
+    }
+
+    const routeSection =
+      nearestStart.index <= nearestDestination.index
+        ? points.slice(nearestStart.index, nearestDestination.index + 1)
+        : points
+            .slice(nearestDestination.index, nearestStart.index + 1)
+            .reverse();
+    const routePoints = [
+      start,
+      ...routeSection,
+      destination
+    ];
+    const distance = routePoints.slice(1).reduce(
+      (sum, point, index) => sum + marsDistanceKm(routePoints[index], point),
+      0
+    );
+    if (!bestRoute || distance < bestRoute.distance) {
+      bestRoute = {
+        traverse,
+        points: routePoints.map((point) => [point.lat, point.lon]),
+        distance,
+        startConnectorKm: nearestStart.distance,
+        destinationConnectorKm: nearestDestination.distance
+      };
+    }
+  });
+  return bestRoute;
+}
+
+function planLocalRoute() {
+  recommendedRoutePolyline.setLatLngs([]);
+  if (!currentMarsPosition) {
+    routePlanStatus.textContent = "Set the astronaut's Mars coordinates before planning a route.";
+    return;
+  }
+  const destination = marsLocations.find(
+    (location) => location.id === document.getElementById("route-destination").value
+  );
+  if (!destination) {
+    routePlanStatus.textContent = "Choose a known Mars destination.";
+    return;
+  }
+  if (savedTraverses.length === 0) {
+    routePlanStatus.textContent =
+      "No completed walks are saved. Plot and save a completed traverse first; no historic route is fabricated.";
+    return;
+  }
+
+  const recommendation = findRouteRecommendation(currentMarsPosition, destination);
+  if (!recommendation) {
+    routePlanStatus.textContent =
+      `No saved walk connects this position and destination within ${ROUTE_SNAP_LIMIT_KM} km of its recorded points.`;
+    return;
+  }
+
+  recommendedRoutePolyline.setLatLngs(recommendation.points);
+  map2D.fitBounds(recommendedRoutePolyline.getBounds(), { padding: [24, 24], maxZoom: 6 });
+  routePlanStatus.textContent =
+    `Suggested from completed walk "${recommendation.traverse.name}" · ${recommendation.distance.toFixed(1)} km. Start/destination connectors are straight-line estimates; terrain safety is not assessed.`;
+}
+
+document.getElementById("btn-plan-route").addEventListener("click", planLocalRoute);
 
 // ==========================================
 // 5. RESIZABLE & HIDEABLE WORKSPACE PANELS
@@ -716,7 +1051,10 @@ function animate() {
   if (targetCamPos) {
     camera.position.lerp(targetCamPos, 0.07);
     if (camera.position.distanceTo(targetCamPos) < 0.08) {
+      const callback = cameraTargetCallback;
       targetCamPos = null;
+      cameraTargetCallback = null;
+      if (callback) callback();
     }
   }
 

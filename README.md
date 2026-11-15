@@ -132,6 +132,12 @@ The API downloads the Mars center-point dataset from the [USGS/IAU Gazetteer](ht
 
 On Windows, the cache defaults to `%TEMP%\martian-nav\mars_nomenclature_center_pts.zip`. Set `MARS_CATALOG_CACHE_DIR` to use another directory. If the Gazetteer cannot be downloaded or refreshed, the API reports a warning and serves cached or bundled records when available.
 
+## Mars position and traverse planning
+
+Mars has no GPS service for an astronaut. **Locate Coordinates** therefore uses latitude and longitude that you enter in Mars coordinates; it does not read browser geolocation or claim to track a live astronaut. It places that manually supplied position on the 3D globe, then centers the 2D Mars map on it.
+
+Use **Plot Traverse** to draw a path on the 2D map. To add it to local route history, give it a name and confirm that it represents a completed walk. Saved walks stay in that browser's local storage and are not uploaded to the server. The local planner can recommend a route only when a saved completed walk comes within 25 km of both the current position and the selected known destination. Recommendations reuse the recorded path and use straight-line connectors; they are advisory and do not account for terrain hazards, slope, rover/astronaut constraints, or communications. No historical astronaut or rover walk dataset is bundled, and the planner does not generate or verify such data.
+
 ## Troubleshooting
 
 - **Location API unavailable:** Start the app and check `/api/locations`. The full Gazetteer requires internet access on first download; the page displays a warning if it has to use bundled records.
