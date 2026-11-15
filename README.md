@@ -1,12 +1,12 @@
 # Martian Guide
 
-Martian Guide is an interactive Mars map with a FastAPI backend. Its location catalog is based on the USGS/IAU Gazetteer of Planetary Nomenclature and includes curated mission and geology records.
+Martian Guide is an interactive Mars map with a FastAPI backend. Its location catalog is based on the USGS/IAU Gazetteer of Planetary Nomenclature and includes curated mission and geology records. The Survival Guide shows coordinate-specific Mars Climate Database estimates, atmospheric mixing ratios, and sourced mission and hazard references.
 
 ## Requirements
 
 - Git
 - Python 3 and pip
-- Internet access to download the Gazetteer on first run and to load online map tiles
+- Internet access to download the Gazetteer and query the Mars Climate Database, and to load online map tiles, fonts, and libraries
 
 ## Fork and clone
 
@@ -90,6 +90,8 @@ Double-click `start-mars-map.bat`, or run:
 
 The launcher reuses a compatible server or starts one, waits for the API, and opens the app in your browser. The server runs in a separate console window; close that window to stop it. If port 8000 is occupied by an incompatible server, stop that server and run the launcher again.
 
+Open the app through the local server at `http://127.0.0.1:8000`. Do not open `mars-map-app/static/index.html` directly as a `file:///` URL: the Survival Guide assets and the map's API requests require the server.
+
 ### Start manually
 
 From the repository root:
@@ -112,19 +114,48 @@ On macOS or Linux, start the app from the repository root with:
 python mars-map-app/app.py
 ```
 
-To check that the API is returning locations in PowerShell:
+Check that the locations API responds in PowerShell:
 
 ```powershell
 (Invoke-RestMethod http://127.0.0.1:8000/api/locations).locations.Count
 ```
+
+In VS Code, the browser launch configuration opens `http://127.0.0.1:8000`; start the app server first.
+
+## Deploy to Vercel
+
+Import the **repository root** into Vercel. Set the project Root Directory to `.`
+and leave the Build Command and Output Directory empty. Vercel detects the
+FastAPI application through the root `index.py`; that entry point serves the map,
+static assets, and API routes together. The root `requirements.txt` includes the
+runtime's `pyshp` dependency. `vercel.json` allows up to 60 seconds for requests
+that refresh the location catalog or query the climate model.
+
+The first location-catalog request needs internet access to download the USGS/IAU
+Gazetteer. Vercel function storage is temporary, so a later function instance may
+download the catalog again. The climate model also requires outbound access to the
+Mars Climate Database service.
+
+## Survival Guide data
+
+The selected map coordinates are used to query the Mars Climate Database (MCD)
+v6.2 for modeled surface temperature, pressure, wind, dust, sunlight, and
+atmospheric gases. The Guide labels these as model estimates; they are not live
+measurements, a forecast, or a crew safety assessment. If the external model is
+unavailable, the Guide reports that state rather than substituting invented
+values. Mission and hazard cards provide general reference information and do
+not imply that food, shelter, power, communications, or a safe site exists at a
+selected coordinate.
 
 ## Run tests
 
 From the repository root:
 
 ```powershell
-python -m unittest discover -s mars-map-app -v
+py -3 -m unittest discover -s .\mars-map-app -v
 ```
+
+On macOS or Linux, run `python3 -m unittest discover -s mars-map-app -v`.
 
 ## Location catalog and cache
 

@@ -12,12 +12,14 @@ The repository's `LICENSE` applies to this project's own code as stated there. I
 
 | Resource | Use in the project | Source / notes |
 |---|---|---|
-| USGS/IAU Gazetteer of Planetary Nomenclature — Mars center-point archive | Primary runtime catalog of named Mars features and their center coordinates and available nomenclature attributes (name, feature type, origin, diameter, approval information, quadrangle, and feature link). The app downloads the archive, caches it for seven days, and parses its shapefile components. | [Mars Gazetteer page](https://planetarynames.wr.usgs.gov/Page/MARS/target); [archive URL used by the app](https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/MARS_nomenclature_center_pts.zip). The archive is hosted on Amazon S3; the project identifies the dataset as the USGS/IAU Gazetteer. |
-| Curated Mars locations | Seven records in the Python backend: five geological or mission exploration locations and two landing-site records (Mars 3 and Viking 1). The browser JavaScript also carries a five-location fallback for direct/offline opening of the HTML. These records add coordinates, elevations, mission labels, geology summaries, mineral lists, and image links not supplied by the app's Gazetteer parser. | Embedded in [`app.py`](mars-map-app/app.py) and [`main.js`](mars-map-app/static/main.js). The Viking 1 record links to [NASA's Viking 1 mission page](https://science.nasa.gov/mission/viking-1/); the Mars 3 record links to [Wikipedia's Mars 3 article](https://en.wikipedia.org/wiki/Mars_3). Other curated records have no per-record source URL in the code. Their geological claims and coordinates should be checked against primary mission/science references and cited individually if required by the submission. |
+| USGS/IAU Gazetteer of Planetary Nomenclature — Mars center-point archive | Primary runtime catalog of named Mars features and their center coordinates and available nomenclature attributes (name, feature type, origin, diameter, approval information, quadrangle, and feature link). The app downloads the archive, caches it for seven days where the host permits, and parses its shapefile components. On Vercel, local function storage is temporary and a later function instance may download the archive again. | [Mars Gazetteer page](https://planetarynames.wr.usgs.gov/Page/MARS/target); [archive URL used by the app](https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/MARS_nomenclature_center_pts.zip). The archive is hosted on Amazon S3; the project identifies the dataset as the USGS/IAU Gazetteer. |
+| Mars Climate Database (MCD) v6.2 | Coordinate- and time-dependent climatology estimates returned by the Survival Guide: surface temperature, pressure, wind, dust optical depth, incident sunlight, and volume mixing ratios for CO₂, N₂, argon, O₂, CO, O₃, and H₂O vapor. The app computes Mars season and local solar time and makes three variable-group requests to the MCD CGI. Results are labeled as model output, not live observations, a forecast, or a human safety assessment. | [MCD home and documentation](https://www-mars.lmd.jussieu.fr/mcd_python/); [MCD CGI endpoint used by the app](https://www-mars.lmd.jussieu.fr/mcd_python/cgi-bin/mcdcgi.py). The feature requires outbound network access and can show an unavailable state if the external service fails. |
+| Curated Mars locations | Curated mission and geology records in the Python backend. The browser JavaScript also carries a five-location fallback dataset, but the complete interface and Survival Guide require the FastAPI server. These records add coordinates, elevations, mission labels, geology summaries, mineral lists, and image links not supplied by the app's Gazetteer parser. | Embedded in [`app.py`](mars-map-app/app.py) and [`main.js`](mars-map-app/static/main.js). The Viking 1 record links to [NASA's Viking 1 mission page](https://science.nasa.gov/mission/viking-1/); the Mars 3 record links to [Wikipedia's Mars 3 article](https://en.wikipedia.org/wiki/Mars_3). Other curated records have no per-record source URL in the code. Their geological claims and coordinates should be checked against primary mission/science references and cited individually if required by the submission. |
 | NASA Mars Trek map tiles | 2D shaded-relief map imagery; the app requests tiles from NASA's Mars Trek WMTS service. | [NASA Mars Trek tile service](https://trek.nasa.gov/tiles/Mars/EQ/). The configured layer is `Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw`; the displayed attribution is “NASA Mars Trek WMTS.” Tiles are loaded online, not bundled. |
 | NASA/JPL images linked by the curated location records | Location-card / detail imagery, loaded from remote URLs at runtime. | See the image inventory below. |
 | Mars 3 and Viking 1 mission highlights | Short mission summaries and links in the application response. | Embedded in [`app.py`](mars-map-app/app.py). The Viking 1 location cites NASA; the Mars 3 location cites Wikipedia. The Mariner 4 highlight says it has no surface landing location and does not include a separate source URL. |
-| Unit-test fixture data | A small synthetic shapefile archive is generated in memory by the tests to exercise parsing, validation, duplicate handling, and longitude normalization. It includes a test record named “Crater Alpha”; it is not operational Mars data. | Generated by `make_gazetteer_archive()` in [`test_app.py`](mars-map-app/test_app.py). No downloaded production dataset or external image is required by these tests. |
+| Survival Guide reference cards | General mission and hazard context for oxygen/life support, toxic gases and regolith, water, food, power, spacesuits/EVA, communications, and shelter. These cards are not coordinate-specific measurements or proof that human infrastructure exists at a map point. The Phoenix perchlorate result is explicitly limited to its landing site. | Embedded in [`survival_guide.py`](mars-map-app/survival_guide.py). Sources include [NASA's Mars 2020/Perseverance instrument information for MOXIE](https://science.nasa.gov/mission/mars-2020-perseverance/science-instruments/#moxie), [NASA's Phoenix mission page](https://science.nasa.gov/mission/mars-phoenix/), and the MCD documentation linked above. The code also links to [NASA's Mars Reconnaissance Orbiter page](https://science.nasa.gov/mission/mars-reconnaissance-orbiter/) for communications context; verify that specific URL before submission because it could not be independently checked during this update. |
+| Unit-test fixture data | A small synthetic shapefile archive is generated in memory by the tests to exercise parsing, duplicate handling, longitude normalization, coordinate bounds, and reference-card coverage. It includes a test record named “Crater Alpha”; it is not operational Mars data. MCD parser and Mars-season tests use small synthetic response strings and fixed dates, not downloaded production data. | Generated by `make_gazetteer_archive()` in [`test_app.py`](mars-map-app/test_app.py); model fixtures are in [`test_survival_guide.py`](mars-map-app/test_survival_guide.py). No downloaded production dataset or external image is required by these tests. |
 | User-recorded traverse paths | Completed walks are saved in the user's browser local storage and used for nearby route recommendations. The project does not bundle historical astronaut or rover walk tracks. | Browser-local data handled in [`main.js`](mars-map-app/static/main.js), as described in [`README.md`](README.md). |
 
 ### External image and texture assets
@@ -40,13 +42,18 @@ Project-authored or project-maintained files found in the repository:
 | File | Contents |
 |---|---|
 | [`mars-map-app/app.py`](mars-map-app/app.py) | FastAPI service, Gazetteer download/cache/parser, curated backend records, and `/api/locations` endpoint. |
+| [`mars-map-app/survival_guide.py`](mars-map-app/survival_guide.py) | MCD request and response parsing, Mars season/local-time calculation, modeled site conditions, and Survival Guide reference cards. |
 | [`mars-map-app/static/index.html`](mars-map-app/static/index.html) | Application page and interface markup/styles; includes external library and font references. |
-| [`mars-map-app/static/main.js`](mars-map-app/static/main.js) | 2D/3D map behavior, fallback location records, location display, and local traverse storage/planning. |
-| [`mars-map-app/test_app.py`](mars-map-app/test_app.py) | Python unit tests and generated in-memory Gazetteer-like fixtures. |
+| [`mars-map-app/static/main.js`](mars-map-app/static/main.js) | 2D/3D map behavior, fallback location records, location display, local traverse storage/planning, and selected-location events for the Survival Guide. |
+| [`frontend/survivalGuide.css`](frontend/survivalGuide.css), [`frontend/survivalGuide.js`](frontend/survivalGuide.js), and [`frontend/vitals.js`](frontend/vitals.js) | Shared Survival Guide styles, reference-card rendering, and coordinate-specific climate-model rendering. The FastAPI app serves these at `/survival-assets/`. |
+| [`mars-map-app/test_app.py`](mars-map-app/test_app.py) and [`mars-map-app/test_survival_guide.py`](mars-map-app/test_survival_guide.py) | Python unit tests for the Gazetteer/API and the climate-model parser and date calculations. |
 | [`mars-map-app/requirements.txt`](mars-map-app/requirements.txt) | Python dependency pins. |
+| [`index.py`](index.py) and [`vercel.json`](vercel.json) | Vercel FastAPI entry point and function timeout configuration. |
+| [`requirements.txt`](requirements.txt) | Root Python dependencies used by Vercel, including `pyshp` for Gazetteer parsing. |
 | [`start-mars-map.ps1`](start-mars-map.ps1) and [`start-mars-map.bat`](start-mars-map.bat) | Windows application launch scripts. |
-| [`.vscode/launch.json`](.vscode/launch.json) | VS Code browser-launch configuration. |
+| [`.vscode/launch.json`](.vscode/launch.json) | VS Code browser-launch configuration for `http://127.0.0.1:8000`; start the FastAPI server first. Do not open the HTML as a `file:///` URL because its server assets and API routes will not load. |
 | [`README.md`](README.md) | Setup, use, data-cache, and route-planning documentation. |
+| [`RESOURCE_INVENTORY.md`](RESOURCE_INVENTORY.md) | Data, third-party resource, software, and attribution inventory with remaining verification items. |
 | [`LICENSE`](LICENSE) | Repository MIT License notice. |
 
 No separate local image files or copied third-party application source files were found in the project tree. Third-party JavaScript and CSS are loaded from CDNs at runtime.
@@ -57,7 +64,7 @@ No separate local image files or copied third-party application source files wer
 
 | Tool / library | Version or reference | Project use |
 |---|---|---|
-| Python | Python 3 (the repository does not pin an exact interpreter version) | Backend and tests. |
+| Python | Python 3 (the repository does not pin an exact interpreter version; Vercel chooses a supported runtime unless configured in project settings) | Backend and tests. |
 | FastAPI | `0.162.7` | HTTP API and static page service. |
 | Uvicorn | `0.54.0` | Local ASGI server. |
 | Pydantic | `2.14.3` | Declared Python dependency. |
@@ -69,6 +76,7 @@ No separate local image files or copied third-party application source files wer
 | Tailwind CSS | CDN build; no version is pinned in the HTML | Interface styling utilities; [CDN script](https://cdn.tailwindcss.com). |
 | Inter font | Google Fonts stylesheet | Interface typography; [Inter stylesheet](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap). |
 | NASA Mars Trek WMTS | Online service | 2D map tile imagery. |
+| Mars Climate Database v6.2 | Online scientific climatology service | Coordinate-specific modeled surface and atmospheric values for the Survival Guide; not a live sensor feed or safety assessment. |
 | NASA/JPL and Wikimedia-hosted image URLs | Listed above | Location imagery and 3D globe texture. |
 
 CDN-loaded dependencies are not vendored, and the HTML does not include integrity hashes. Their availability and delivered versions can depend on the external services (particularly the unpinned Tailwind CDN build).
@@ -78,9 +86,9 @@ CDN-loaded dependencies are not vendored, and the HTML does not include integrit
 - Git and GitHub are referenced in the project workflow documentation for source control and collaboration.
 - `pip` installs the Python dependencies; Python's `unittest` runner executes the tests.
 - Windows PowerShell and Windows batch (`.bat`) are used by the provided launcher scripts.
-- A web browser displays and runs the frontend; the VS Code launch configuration opens the page directly.
+- A web browser displays the frontend; the VS Code launch configuration opens the local HTTP app after its FastAPI server has been started.
 - The app uses browser `localStorage` for traverse history and `fetch` for its local API. These are platform APIs, not additional downloaded project packages.
-- Internet access is needed for the full Gazetteer refresh, NASA map tiles, external images, and CDN-hosted libraries/fonts. The app can fall back to bundled curated records if the Gazetteer is unavailable.
+- Internet access is needed for the full Gazetteer refresh, MCD requests, NASA map tiles, external images, and CDN-hosted libraries/fonts. The app can fall back to bundled curated records if the Gazetteer is unavailable; the Survival Guide reports unavailable MCD data rather than fabricating model values.
 
 ## Verification items before submission
 
