@@ -985,6 +985,7 @@ const leftColumn = document.getElementById("workspace-left-column");
 const datasetSidebar = document.getElementById("dataset-sidebar");
 const survivalGuide = document.getElementById("survival-guide");
 const survivalGuideButton = document.getElementById("act-survival-btn");
+const mapInfoButton = document.getElementById("act-data-btn");
 let isDragging = false;
 let pane2DVisible = true;
 
@@ -1041,7 +1042,9 @@ function toggleMainContainer() {
 }
 
 function toggleSidebar() {
-  datasetSidebar.classList.toggle("hidden");
+  const isVisible = !datasetSidebar.classList.toggle("hidden");
+  mapInfoButton.classList.toggle("is-active", isVisible);
+  mapInfoButton.setAttribute("aria-pressed", String(isVisible));
   updateLeftColumnLayout();
 }
 
@@ -1062,7 +1065,7 @@ document.getElementById("act-map-btn").addEventListener("click", toggleMainConta
 document.getElementById("btn-tab-close").addEventListener("click", toggleMainContainer);
 document.getElementById("btn-reopen-container").addEventListener("click", toggleMainContainer);
 
-document.getElementById("act-data-btn").addEventListener("click", toggleSidebar);
+mapInfoButton.addEventListener("click", toggleSidebar);
 document.getElementById("btn-close-sidebar").addEventListener("click", toggleSidebar);
 survivalGuideButton.addEventListener("click", toggleSurvivalGuide);
 

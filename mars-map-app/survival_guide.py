@@ -1,5 +1,6 @@
 import math
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,6 +20,8 @@ MCD_VARIABLE_GROUPS = (
 )
 MARS_SOL_SECONDS = 88775.245
 MARS_YEAR_SOLS = 668.6
+MCD_MAX_ATTEMPTS = 2
+MCD_RETRY_DELAY_SECONDS = 0.5
 SURVIVAL_REFERENCE_CARDS = [
     {
         "id": "oxygen",
@@ -238,11 +241,23 @@ def _query_mcd_group(latitude, longitude, solar_longitude, local_time, variables
         f"{MCD_CGI_URL}?{urllib.parse.urlencode(params)}",
         headers={"User-Agent": "MartianNav/1.0"},
     )
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            payload = response.read(64 * 1024 + 1)
-    except (OSError, urllib.error.URLError) as error:
-        raise SurvivalDataUnavailable("Mars Climate Database request failed") from error
+    for attempt in range(MCD_MAX_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = response.read(64 * 1024 + 1)
+            break
+        except urllib.error.HTTPError as error:
+            retryable = error.code in (408, 425) or 500 <= error.code < 600
+            if not retryable or attempt == MCD_MAX_ATTEMPTS - 1:
+                raise SurvivalDataUnavailable(
+                    "Mars Climate Database request failed"
+                ) from error
+        except (OSError, urllib.error.URLError) as error:
+            if attempt == MCD_MAX_ATTEMPTS - 1:
+                raise SurvivalDataUnavailable(
+                    "Mars Climate Database request failed"
+                ) from error
+        time.sleep(MCD_RETRY_DELAY_SECONDS)
     if len(payload) > 64 * 1024:
         raise SurvivalDataUnavailable("Mars Climate Database response was too large")
     try:

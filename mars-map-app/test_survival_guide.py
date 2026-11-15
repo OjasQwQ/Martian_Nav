@@ -1,13 +1,35 @@
 import sys
+import urllib.error
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 import survival_guide
 
 
 class MarsClimateModelTests(unittest.TestCase):
+    def test_retries_transient_mcd_transport_failure(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = (
+            b"<ul><li>Temperature ..... 270.1</li></ul>"
+        )
+        with (
+            patch.object(
+                survival_guide.urllib.request,
+                "urlopen",
+                side_effect=[urllib.error.URLError("temporary"), response],
+            ) as urlopen,
+            patch.object(survival_guide.time, "sleep"),
+        ):
+            result = survival_guide._query_mcd_group(
+                18.4447, 77.4508, 120.0, 12.0, ("tsurf",)
+            )
+
+        self.assertEqual(result, {"tsurf": 270.1})
+        self.assertEqual(urlopen.call_count, 2)
+
     def test_parses_scientific_notation_from_model_results(self):
         response = """
         <ul>

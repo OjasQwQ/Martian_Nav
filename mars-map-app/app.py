@@ -442,7 +442,11 @@ def get_survival_guide(lat: float, lon: float):
     try:
         return get_site_conditions(lat, lon)
     except SurvivalDataUnavailable as error:
-        logger.warning("Mars climate model unavailable: %s", error)
+        logger.warning(
+            "Mars climate model unavailable: %s; cause: %s",
+            error,
+            error.__cause__ or "unknown",
+        )
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
