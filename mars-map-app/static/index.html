@@ -126,21 +126,34 @@
       background-color: transparent !important;
     }
 
-    #pane-2d > div:first-child {
+    #pane-2d-header {
+      position: relative;
+      z-index: 500;
       min-height: 58px;
+      flex: 0 0 auto;
     }
 
     #pane-2d {
       width: 100%;
       min-height: 0;
       flex: 1 1 50%;
+      overflow: hidden;
     }
 
-    #pane-2d > div:last-child {
+    #pane-2d-content {
+      position: relative;
+      z-index: 0;
+      isolation: isolate;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow-y: auto;
+    }
+
+    #pane-2d-content > div:last-child {
       background-color: transparent !important;
     }
 
-    #pane-2d > div:last-child > div {
+    #pane-2d-content > div:last-child > div {
       background-color: rgba(5, 6, 8, .68) !important;
       border: 1px solid var(--rule) !important;
       border-radius: 0 !important;
@@ -155,8 +168,8 @@
     #loc-minerals span { color: #c2b69e !important; }
     label,
     #pane-2d > div:first-child span,
-    #pane-2d > div:last-child > div > div:first-child,
-    #pane-2d > div:last-child > div > span {
+    #pane-2d-content > div:last-child > div > div:first-child,
+    #pane-2d-content > div:last-child > div > span {
       color: var(--rust-light) !important;
     }
 
@@ -284,8 +297,6 @@
   <header class="h-8 bg-[#1e1e24] border-b border-zinc-800 flex items-center justify-between px-3 text-xs text-zinc-400 shrink-0">
     <div class="flex items-center space-x-2">
       <span class="font-bold text-orange-500">MARS FIELD ATLAS</span>
-      <span class="text-zinc-600">|</span>
-      <span class="text-zinc-300">Surface Operations // Jezero Quadrangle</span>
     </div>
   </header>
 
@@ -345,42 +356,36 @@
 
         <!-- 2D MAP AND LOCATION DETAILS -->
         <div id="pane-2d" class="flex flex-col bg-[#141418] overflow-y-auto">
-          <div class="p-3 bg-[#18181b] border-b border-zinc-800 flex items-start justify-start sticky top-0 z-20 shrink-0">
+          <div id="pane-2d-header" class="p-3 bg-[#18181b] border-b border-zinc-800 flex items-start justify-start">
             <div>
-              <span class="text-[10px] uppercase tracking-wider text-orange-400 font-bold block">Orbital Survey // 2D</span>
+              <span class="text-[10px] uppercase tracking-wider text-orange-400 font-bold block">Orbital Survey</span>
               <h2 id="loc-title" class="text-sm font-bold text-white">Jezero Crater: Margin Unit</h2>
             </div>
           </div>
 
-          <div class="relative w-full h-64 border-b border-zinc-800 shrink-0">
-            <div id="leaflet-2d-map" class="w-full h-full"></div>
-            <div class="absolute bottom-2 left-2 z-[400] flex space-x-1.5">
-              <button id="btn-draw-route" class="bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 px-2 py-1 rounded text-[11px]">
-                Plot Traverse: OFF
-              </button>
-              <button id="btn-clear-route" class="hidden bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-700 px-2 py-1 rounded text-[11px]">
-                Clear
-              </button>
-            </div>
-          </div>
-
-          <div class="p-4 space-y-4 text-xs shrink-0">
-            <div id="loc-image-card" class="bg-zinc-900 border border-zinc-800 rounded overflow-hidden">
-              <div class="px-3 py-1.5 bg-zinc-800/80 text-[11px] font-semibold text-zinc-300 flex justify-between">
-                <span>Orbital Surface Image</span>
-                <a id="loc-img-link" href="#" target="_blank" class="text-orange-400 hover:underline">Open Full Image ↗</a>
+          <div id="pane-2d-content">
+            <div class="relative w-full h-64 border-b border-zinc-800 shrink-0">
+              <div id="leaflet-2d-map" class="w-full h-full"></div>
+              <div class="absolute bottom-2 left-2 z-[400] flex space-x-1.5">
+                <button id="btn-draw-route" class="bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 px-2 py-1 rounded text-[11px]">
+                  Plot Traverse: OFF
+                </button>
+                <button id="btn-clear-route" class="hidden bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-700 px-2 py-1 rounded text-[11px]">
+                  Clear
+                </button>
               </div>
-              <img id="loc-img" src="" alt="Mars 2D Location" class="w-full h-48 object-cover bg-zinc-950" />
             </div>
 
-            <div id="loc-water-card" class="bg-zinc-900 border border-zinc-800 rounded p-3 space-y-1.5">
-              <div class="text-[11px] font-bold text-orange-400 uppercase">Water & Geological Record</div>
-              <p id="loc-water" class="text-zinc-300 leading-relaxed"></p>
-            </div>
+            <div class="p-4 space-y-4 text-xs">
+              <div id="loc-water-card" class="bg-zinc-900 border border-zinc-800 rounded p-3 space-y-1.5">
+                <div class="text-[11px] font-bold text-orange-400 uppercase">Water & Geological Record</div>
+                <p id="loc-water" class="text-zinc-300 leading-relaxed"></p>
+              </div>
 
-            <div id="loc-minerals-card" class="bg-zinc-900 border border-zinc-800 rounded p-3">
-              <span class="text-[10px] text-zinc-400 uppercase block mb-1.5">Mineral Observations</span>
-              <div id="loc-minerals" class="flex flex-wrap gap-1.5"></div>
+              <div id="loc-minerals-card" class="bg-zinc-900 border border-zinc-800 rounded p-3">
+                <span class="text-[10px] text-zinc-400 uppercase block mb-1.5">Mineral Observations</span>
+                <div id="loc-minerals" class="flex flex-wrap gap-1.5"></div>
+              </div>
             </div>
 
             <div id="loc-gazetteer-card" class="hidden bg-zinc-900 border border-zinc-800 rounded p-3 space-y-1.5">
@@ -400,10 +405,9 @@
     <main id="mars-project-container" class="flex-1 flex flex-col bg-[#121215] overflow-hidden">
 
       <!-- TAB BAR -->
-      <div id="field-map-heading" class="h-9 w-full bg-[#18181b] border-b border-zinc-800 flex items-center justify-between px-3 shrink-0">
-        <h2 class="text-xs font-semibold tracking-wider text-zinc-100">FIELD MAP</h2>
+      <div id="field-map-heading" class="px-3 py-2 font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800 flex justify-between items-center shrink-0">
+        <span class="normal-case">3D View</span>
         <button id="btn-tab-close" class="text-zinc-500 hover:text-zinc-200" title="Hide Field Map">✕</button>
-
       </div>
 
       <div id="split-workspace" class="flex-1 overflow-hidden relative">

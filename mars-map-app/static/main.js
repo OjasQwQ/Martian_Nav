@@ -516,13 +516,6 @@ function selectLocation(loc, fly3D = true) {
     Number.isFinite(loc.elev) ? `${loc.elev} m` : "N/A";
 
   document.getElementById("loc-title").textContent = loc.name;
-  const imageCard = document.getElementById("loc-image-card");
-  const image = document.getElementById("loc-img");
-  const imageLink = document.getElementById("loc-img-link");
-  imageCard.classList.toggle("hidden", !loc.image_2d);
-  image.src = loc.image_2d || "";
-  imageLink.href = loc.image_2d || "#";
-
   const waterCard = document.getElementById("loc-water-card");
   waterCard.classList.toggle("hidden", !loc.water_summary);
   document.getElementById("loc-water").textContent = loc.water_summary || "";
