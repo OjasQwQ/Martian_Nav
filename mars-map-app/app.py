@@ -454,16 +454,7 @@ def get_survival_guide_references():
 
 # Mount static files if the directory exists
 static_dir = os.path.join(os.path.dirname(__file__), "static")
-frontend_assets_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "frontend")
-)
 if os.path.exists(static_dir):
-    if os.path.exists(frontend_assets_dir):
-        app.mount(
-            "/survival-assets",
-            StaticFiles(directory=frontend_assets_dir),
-            name="survival-assets",
-        )
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     @app.get("/")

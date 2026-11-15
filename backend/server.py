@@ -96,4 +96,14 @@ def open_browser():
 
 threading.Timer(1.5, open_browser).start()
 frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+survival_assets_path = os.path.join(
+    mars_app_directory,
+    "static",
+    "survival-assets",
+)
+app.mount(
+    "/survival-assets",
+    StaticFiles(directory=survival_assets_path),
+    name="survival-assets",
+)
 app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
