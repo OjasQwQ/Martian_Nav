@@ -1,117 +1,162 @@
+function createGuideElement(tag, className, text) {
+  const element = document.createElement(tag)
+  if (className) element.className = className
+  if (text) element.textContent = text
+  return element
+}
+
 async function fetchSurvivalCards() {
   try {
-    const res = await fetch('http://localhost:8000/survival-cards')
-    const data = await res.json()
-    renderSurvivalCards(data)
-  } catch (err) {
-    renderCardsError()
+    const response = await fetch('/api/survival-guide/references')
+    if (!response.ok) {
+      throw new Error(`Reference request failed (${response.status})`)
+    }
+    const cards = await response.json()
+    if (!Array.isArray(cards)) {
+      throw new Error('Survival references must be a list')
+    }
+    renderSurvivalCards(cards)
+  } catch (error) {
+    renderCardsError(error)
   }
 }
 
 function renderSurvivalCards(cards) {
   const section = document.getElementById('cards-section')
+  section.replaceChildren()
+  section.appendChild(
+    createGuideElement('p', 'survival-section-title', 'MISSION SYSTEMS & SITE HAZARDS')
+  )
 
-  const html = `
-    <p class="text-mars text-xs font-semibold tracking-widest mb-2">SURVIVAL REFERENCE</p>
-    <div class="flex flex-col gap-1.5">
-      ${cards.map(card => `
-        <div
-          id="card-${card.id}"
-          class="bg-space border border-white/5 rounded-lg overflow-hidden transition-all duration-200"
-        >
-          <!-- card header -->
-          <button
-            onclick="toggleCard('${card.id}')"
-            class="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
-          >
-            <span class="text-offwhite/40 text-sm shrink-0">
-              ${getCardIcon(card.id)}
-            </span>
-            <span class="text-offwhite text-sm font-semibold flex-1">
-              ${card.title}
-            </span>
-            <span
-              class="text-xs font-semibold px-1.5 py-0.5 rounded border shrink-0"
-              style="color: ${card.tag_color}; border-color: ${card.tag_color}40"
-            >
-              ${card.tag}
-            </span>
-            <span
-              id="chevron-${card.id}"
-              class="text-offwhite/30 text-xs shrink-0 transition-transform duration-200"
-            >
-              ▼
-            </span>
-          </button>
+  const list = createGuideElement('div', 'survival-card-list', '')
+  cards.forEach(card => {
+    const article = createGuideElement('article', 'survival-card', '')
+    article.id = `card-${card.id}`
 
-          <!-- summary always visible -->
-          <p class="text-offwhite/45 text-xs leading-relaxed px-3 pb-2.5">
-            ${card.summary}
-          </p>
+    const button = createGuideElement('button', 'survival-card-toggle', '')
+    button.type = 'button'
+    button.dataset.cardToggle = card.id
+    button.setAttribute('aria-expanded', 'false')
+    button.setAttribute('aria-controls', `detail-${card.id}`)
+    button.appendChild(
+      createGuideElement('span', 'survival-card-icon', getCardIcon(card.id))
+    )
+    button.appendChild(
+      createGuideElement('span', 'survival-card-title', card.title)
+    )
+    const tag = createGuideElement('span', 'survival-card-tag', card.tag)
+    tag.style.setProperty('--tag-color', card.tag_color)
+    button.appendChild(tag)
+    const chevron = createGuideElement('span', 'survival-card-chevron', '▼')
+    chevron.id = `chevron-${card.id}`
+    chevron.setAttribute('aria-hidden', 'true')
+    button.appendChild(chevron)
+    article.appendChild(button)
 
-          <!-- detail expandable -->
-          <div
-            id="detail-${card.id}"
-            class="hidden border-t border-white/5 px-3 py-2.5 bg-cyan/5"
-          >
-            <p class="text-offwhite/60 text-xs leading-relaxed">
-              ${card.detail}
-            </p>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `
-
-  section.innerHTML = html
+    article.appendChild(
+      createGuideElement('p', 'survival-card-summary', card.summary)
+    )
+    const detail = createGuideElement('div', 'survival-card-detail', '')
+    detail.id = `detail-${card.id}`
+    detail.hidden = true
+    detail.appendChild(createGuideElement('p', '', card.detail))
+    if (card.source_url) {
+      const source = createGuideElement('a', 'survival-source-link', 'Source')
+      source.href = card.source_url
+      source.target = '_blank'
+      source.rel = 'noopener noreferrer'
+      detail.appendChild(source)
+    }
+    article.appendChild(detail)
+    list.appendChild(article)
+  })
+  section.appendChild(list)
 }
 
 function toggleCard(id) {
   const detail = document.getElementById(`detail-${id}`)
   const chevron = document.getElementById(`chevron-${id}`)
-  const card = document.getElementById(`card-${id}`)
+  const button = document.querySelector(`[data-card-toggle="${id}"]`)
+  if (!detail || !chevron || !button) return
 
-  const isOpen = !detail.classList.contains('hidden')
-
-  if (isOpen) {
-    detail.classList.add('hidden')
-    chevron.style.transform = 'rotate(0deg)'
-    card.style.borderColor = 'rgba(255,255,255,0.05)'
-  } else {
-    detail.classList.remove('hidden')
-    chevron.style.transform = 'rotate(180deg)'
-    card.style.borderColor = 'rgba(231,111,50,0.3)'
-  }
+  const isOpen = !detail.hidden
+  detail.hidden = isOpen
+  button.setAttribute('aria-expanded', String(!isOpen))
+  chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)'
 }
 
 function getCardIcon(id) {
   const icons = {
     oxygen: '○',
-    food: '◈',
+    toxins: '⚠',
     water: '◇',
+    food: '◈',
     power: '◉',
-    suits: '◫',
+    spacesuits: '◫',
     comms: '◎',
     shelter: '▣'
   }
   return icons[id] || '◆'
 }
 
-function renderCardsError() {
+function renderCardsError(error) {
   const section = document.getElementById('cards-section')
-  section.innerHTML = `
-    <p class="text-mars text-xs font-semibold tracking-widest mb-2">SURVIVAL REFERENCE</p>
-    <div class="bg-space border border-amber/20 rounded-lg p-4 text-center">
-      <p class="text-amber text-xs font-medium">Cannot reach backend</p>
-      <p class="text-offwhite/30 text-xs mt-1">Make sure server.py is running</p>
-      <button
-        onclick="fetchSurvivalCards()"
-        class="mt-3 px-3 py-1.5 bg-mars/10 border border-mars/30 rounded text-mars text-xs font-medium hover:bg-mars/20 transition-colors"
-      >
-        Retry
-      </button>
-    </div>
-  `
+  section.replaceChildren()
+  section.appendChild(
+    createGuideElement('p', 'survival-section-title', 'MISSION SYSTEMS & SITE HAZARDS')
+  )
+  const panel = createGuideElement('div', 'survival-error', '')
+  panel.setAttribute('role', 'status')
+  panel.appendChild(
+    createGuideElement('p', 'survival-error-title', 'Reference data unavailable')
+  )
+  panel.appendChild(
+    createGuideElement('p', 'survival-error-message', error.message)
+  )
+  const retry = createGuideElement('button', 'survival-retry', 'Retry')
+  retry.type = 'button'
+  retry.dataset.retryCards = 'true'
+  panel.appendChild(retry)
+  section.appendChild(panel)
 }
+
+function renderSiteContext(site) {
+  const context = document.getElementById('site-context')
+  context.replaceChildren()
+  if (!site.waterSummary && (!site.minerals || site.minerals.length === 0)) return
+
+  const panel = createGuideElement('div', 'survival-site-context', '')
+  panel.appendChild(
+    createGuideElement(
+      'p',
+      'survival-site-label',
+      'RECORDED GEOLOGY · NOT A SAFETY ASSAY'
+    )
+  )
+  if (site.waterSummary) {
+    panel.appendChild(createGuideElement('p', '', site.waterSummary))
+  }
+  if (site.minerals && site.minerals.length > 0) {
+    panel.appendChild(
+      createGuideElement('span', 'survival-site-label', 'REPORTED MINERALS')
+    )
+    panel.appendChild(createGuideElement('p', '', site.minerals.join(' · ')))
+  }
+  context.appendChild(panel)
+}
+
+window.addEventListener('mars-location-selected', event => {
+  if (event.detail) renderSiteContext(event.detail)
+})
+
+document.getElementById('cards-section').addEventListener('click', event => {
+  if (event.target.closest('[data-retry-cards]')) {
+    fetchSurvivalCards()
+    return
+  }
+
+  const toggle = event.target.closest('[data-card-toggle]')
+  if (toggle) toggleCard(toggle.dataset.cardToggle)
+})
 
 fetchSurvivalCards()

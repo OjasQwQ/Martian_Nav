@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/survival-assets/survivalGuide.css" />
 
   <!-- TailwindCSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -111,10 +112,10 @@
 
     #workspace-panels { min-width: 0; }
     #workspace-left-column {
-      width: 38%;
+      width: 34%;
       min-width: 280px;
       min-height: 0;
-      flex: 0 0 38%;
+      flex: 0 0 34%;
     }
 
     #mars-project-container,
@@ -248,6 +249,26 @@
       border-radius: 0;
     }
 
+    #mission-tools button {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      padding: 4px;
+      border: 1px solid transparent !important;
+      border-radius: 4px !important;
+      background: transparent !important;
+      color: var(--muted) !important;
+      box-shadow: none !important;
+    }
+
+    #mission-tools button:hover,
+    #mission-tools button.is-active {
+      border-color: transparent !important;
+      background: rgba(166, 83, 55, .2) !important;
+      color: var(--rust-light) !important;
+    }
+
     ::-webkit-scrollbar { width: 12px; height: 12px; }
     ::-webkit-scrollbar-track {
       background: #10110f;
@@ -275,6 +296,14 @@
       #empty-workspace {
         min-height: 70vh;
         flex: 0 0 70vh;
+      }
+      #survival-guide {
+        width: 100%;
+        min-width: 0;
+        min-height: 60vh;
+        flex: 0 0 60vh;
+        border-top: 1px solid var(--rule);
+        border-left: 0;
       }
       #drag-resizer {
         width: 100%;
@@ -304,13 +333,19 @@
   <div class="flex-1 flex overflow-hidden">
 
     <!-- Mission tools -->
-    <aside class="w-11 bg-[#18181b] border-r border-zinc-800 flex flex-col items-center py-3 space-y-4 shrink-0 z-20">
-      <button id="act-map-btn" title="Martian Map Container" class="p-2 rounded bg-orange-500/20 text-orange-400 border-l-2 border-orange-500">
+    <aside id="mission-tools" class="w-11 bg-[#18181b] border-r border-zinc-800 flex flex-col items-center py-3 space-y-4 shrink-0 z-20">
+      <button id="act-map-btn" title="Martian Map Container" aria-label="Toggle Mars map" class="is-active">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
       </button>
-      <button id="act-data-btn" title="Map Info" class="p-2 rounded text-zinc-400 hover:text-zinc-100">
+      <button id="act-survival-btn" title="Survival Guide" aria-label="Toggle Survival Guide" aria-controls="survival-guide" aria-pressed="true" class="is-active">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3 19 6v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3Z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-3-3v6"/>
+        </svg>
+      </button>
+      <button id="act-data-btn" title="Map Info" aria-label="Toggle Map Info">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
         </svg>
@@ -487,6 +522,31 @@
       </div>
     </main>
 
+    <aside id="survival-guide" class="flex flex-col" aria-label="Survival Guide">
+      <div class="survival-header">
+        <span class="survival-indicator" aria-hidden="true"></span>
+        <h2>Survival Guide</h2>
+        <span id="model-state" class="survival-model-state">MCD 6.2</span>
+      </div>
+      <div class="survival-scroll">
+        <div id="survival-position" class="survival-position" aria-live="polite">
+          Select a map location or enter Mars coordinates.
+        </div>
+        <div id="site-context"></div>
+        <div id="vitals-section"></div>
+        <div id="atmosphere-section"></div>
+        <div class="survival-divider" aria-hidden="true"></div>
+        <div id="cards-section"></div>
+      </div>
+      <div class="survival-footer">
+        <div class="survival-footer-status">
+          <span class="survival-status-dot" aria-hidden="true"></span>
+          <span>MCD climate model · NASA mission references</span>
+        </div>
+        <span id="model-updated" class="survival-updated">Waiting for selection</span>
+      </div>
+    </aside>
+
     <!-- Hidden map window state -->
     <div id="empty-workspace" class="hidden flex-1 flex-col items-center justify-center bg-[#121215] text-zinc-500 space-y-3">
         <p class="text-sm">Map window is closed.</p>
@@ -504,5 +564,7 @@
     mainScript.src = window.location.protocol === "file:" ? "./main.js" : "/static/main.js";
     document.body.appendChild(mainScript);
   </script>
+  <script src="/survival-assets/vitals.js"></script>
+  <script src="/survival-assets/survivalGuide.js"></script>
 </body>
 </html>

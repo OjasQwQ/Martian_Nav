@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 
 import shapefile
+from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).parent))
 import app
@@ -90,6 +91,29 @@ class GazetteerParserTests(unittest.TestCase):
 
         self.assertEqual(len(locations), 1)
         self.assertEqual(locations[0]["id"], "usgs-123")
+
+
+class SurvivalGuideRouteTests(unittest.TestCase):
+    def test_rejects_coordinates_outside_mars_bounds(self):
+        for latitude, longitude in ((91, 0), (-91, 0), (0, 181), (0, -181)):
+            with self.subTest(latitude=latitude, longitude=longitude):
+                with self.assertRaises(HTTPException) as raised:
+                    app.get_survival_guide(latitude, longitude)
+                self.assertEqual(raised.exception.status_code, 422)
+
+    def test_references_cover_requested_survival_topics(self):
+        card_ids = {card["id"] for card in app.get_survival_guide_references()}
+        required_topics = {
+            "oxygen",
+            "toxins",
+            "water",
+            "food",
+            "power",
+            "comms",
+            "shelter",
+        }
+
+        self.assertTrue(required_topics.issubset(card_ids))
 
 
 if __name__ == "__main__":

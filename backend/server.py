@@ -1,12 +1,24 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
-import webbrowser
+from pathlib import Path
+import sys
 import threading
 import time
-from data import vitals_data, survival_cards
+import webbrowser
+
+from data import vitals_data
 from nasa_fetch import fetch_nasa_weather
+
+mars_app_directory = str(Path(__file__).resolve().parents[1] / "mars-map-app")
+if mars_app_directory not in sys.path:
+    sys.path.insert(0, mars_app_directory)
+from survival_guide import (
+    SURVIVAL_REFERENCE_CARDS,
+    SurvivalDataUnavailable,
+    get_site_conditions,
+)
 
 app = FastAPI()
 
@@ -41,7 +53,25 @@ def get_vitals():
 
 @app.get("/survival-cards")
 def get_survival_cards():
-    return survival_cards
+    return SURVIVAL_REFERENCE_CARDS
+
+
+@app.get("/api/survival-guide")
+def get_survival_guide(lat: float, lon: float):
+    if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+        raise HTTPException(
+            status_code=422,
+            detail="Latitude must be between -90 and 90 and longitude between -180 and 180.",
+        )
+    try:
+        return get_site_conditions(lat, lon)
+    except SurvivalDataUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.get("/api/survival-guide/references")
+def get_survival_guide_references():
+    return SURVIVAL_REFERENCE_CARDS
 
 @app.get("/status")
 def get_status():

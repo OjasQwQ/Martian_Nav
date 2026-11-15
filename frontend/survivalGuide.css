@@ -1,0 +1,336 @@
+#survival-guide {
+  --ink: #d3d0c8;
+  --muted: #96948d;
+  --rule: #4a4945;
+  --paper: #b19b78;
+  --rust: #a65337;
+  --rust-light: #bd7452;
+  width: 320px;
+  min-width: 280px;
+  min-height: 0;
+  flex: 0 0 320px;
+  overflow: hidden;
+  border-left: 1px solid var(--rule);
+  background: rgba(5, 6, 8, .88);
+  color: var(--ink);
+  font-family: Inter, "Segoe UI", sans-serif;
+}
+
+#survival-guide button {
+  border: 1px solid var(--rule) !important;
+  border-radius: 0 !important;
+  background: #111210 !important;
+  color: var(--ink) !important;
+  font: inherit !important;
+  box-shadow: none !important;
+}
+
+#survival-guide button:hover {
+  border-color: var(--rust-light) !important;
+  background: #1b1714 !important;
+}
+
+.survival-header,
+.survival-footer {
+  flex: 0 0 auto;
+  background: rgba(5, 6, 8, .9);
+}
+
+.survival-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.survival-indicator,
+.survival-footer-status .survival-status-dot { display: none; }
+
+.survival-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  background: var(--rust-light);
+}
+
+.survival-header h2 {
+  flex: 1;
+  margin: 0;
+  color: #e0ddd4;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+.survival-sol,
+.survival-source,
+.survival-status-label { color: var(--rust-light); }
+
+.survival-sol,
+.survival-footer,
+.survival-source { font-size: 10px; }
+
+.survival-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 14px;
+  scrollbar-color: #77746b transparent;
+  scrollbar-width: thin;
+}
+
+.survival-section-title {
+  margin: 0 0 8px;
+  color: var(--rust-light);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.survival-vitals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.survival-vital,
+.survival-alert,
+.survival-all-clear,
+.survival-error,
+.survival-card {
+  border: 1px solid var(--rule);
+  background: rgba(17, 18, 16, .86);
+}
+
+.survival-vital { min-width: 0; padding: 9px; }
+.survival-vital-heading,
+.survival-vital-value,
+.survival-vital-meta,
+.survival-alert,
+.survival-all-clear,
+.survival-footer-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.survival-vital-heading { font-size: 10px; }
+.survival-vital-label,
+.survival-vital-note { color: var(--muted); }
+.survival-vital-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.survival-vital-value {
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 5px;
+  color: #e0ddd4;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.survival-vital-unit,
+.survival-vital-note,
+.survival-source { font-size: 10px; }
+.survival-vital-unit,
+.survival-source-sim,
+.survival-updated { color: var(--muted); }
+.survival-vital-meta {
+  justify-content: space-between;
+  margin-top: 5px;
+}
+
+.survival-vital-note { line-height: 1.4; }
+.survival-source { flex: 0 0 auto; padding: 2px 4px; }
+.survival-source-nasa { color: var(--rust-light); background: rgba(166, 83, 55, .16); }
+
+.survival-alerts { display: flex; flex-direction: column; gap: 5px; margin-bottom: 9px; }
+.survival-alert,
+.survival-all-clear {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 10px;
+}
+.survival-alert { justify-content: space-between; }
+.survival-alert-name { flex: 1; font-weight: 700; letter-spacing: .06em; }
+.survival-all-clear { color: #9fa58d; }
+.survival-all-clear .survival-status-dot { background: #9fa58d; }
+.survival-divider { height: 1px; flex: 0 0 auto; background: var(--rule); }
+
+.survival-card-list { display: flex; flex-direction: column; gap: 6px; }
+.survival-card { overflow: hidden; }
+#survival-guide .survival-card-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 0 !important;
+  background: transparent !important;
+  text-align: left;
+}
+#survival-guide .survival-card-toggle:hover { background: rgba(189, 116, 82, .08) !important; }
+#survival-guide .survival-card-icon { color: var(--paper) !important; }
+#survival-guide .survival-card-title {
+  flex: 1;
+  color: #d3d0c8 !important;
+  font-size: 11px;
+  font-weight: 600;
+}
+#survival-guide .survival-card-tag {
+  flex: 0 0 auto;
+  color: var(--tag-color, var(--rust-light)) !important;
+  font-size: 9px;
+}
+#survival-guide .survival-card-chevron {
+  color: var(--muted) !important;
+  font-size: 10px;
+  transition: transform .15s ease;
+}
+.survival-card-summary,
+.survival-card-detail {
+  margin: 0;
+  padding: 0 9px 9px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.survival-card-detail {
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  background: rgba(177, 155, 120, .04);
+  color: #c2b69e;
+}
+
+.survival-error { padding: 12px; text-align: center; }
+.survival-error-title { margin: 0; color: #d0a76e; font-size: 11px; }
+.survival-error-message { margin: 5px 0 10px; color: var(--muted); font-size: 10px; }
+#survival-guide .survival-retry {
+  padding: 5px 10px;
+  color: var(--rust-light) !important;
+  font-size: 10px !important;
+}
+
+.survival-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.survival-footer-status { color: var(--rust-light); }
+.survival-footer-status .survival-status-dot { background: var(--rust-light); }
+.survival-updated { font-size: 9px; }
+
+.survival-model-state {
+  color: var(--rust-light);
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+.survival-position,
+.survival-site-context,
+.survival-data-note {
+  border: 1px solid var(--rule);
+  background: rgba(17, 18, 16, .86);
+}
+
+.survival-position {
+  padding: 9px 10px;
+  color: #e0ddd4;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.survival-position-coordinates,
+.survival-model-note,
+.survival-site-label {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.survival-site-context {
+  padding: 9px 10px;
+  color: #c2b69e;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.survival-site-label {
+  margin: 0 0 4px;
+  color: var(--rust-light);
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.survival-data-note {
+  margin: 0 0 8px;
+  padding: 8px 9px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.survival-gas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.survival-gas-card {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  background: rgba(17, 18, 16, .86);
+}
+
+.survival-gas-name {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.survival-gas-value {
+  margin-top: 4px;
+  color: #e0ddd4;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.survival-gas-unit {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.survival-warning {
+  border-left: 2px solid #d0a76e;
+  padding: 8px 9px;
+  background: rgba(208, 167, 110, .08);
+  color: #d0c4ae;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.survival-source-link {
+  display: inline-block;
+  margin-top: 7px;
+  color: var(--rust-light) !important;
+  font-size: 9px;
+  text-decoration: underline;
+}

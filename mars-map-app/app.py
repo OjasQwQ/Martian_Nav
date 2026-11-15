@@ -10,12 +10,17 @@ import zipfile
 from pathlib import Path
 from threading import Lock
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import shapefile
 import uvicorn
+from survival_guide import (
+    SURVIVAL_REFERENCE_CARDS,
+    SurvivalDataUnavailable,
+    get_site_conditions,
+)
 
 app = FastAPI(title="NASA Space Apps 2026 - Martian Map Base")
 logger = logging.getLogger(__name__)
@@ -426,9 +431,39 @@ def get_locations():
     return get_location_payload()
 
 
+@app.get("/api/survival-guide")
+def get_survival_guide(lat: float, lon: float):
+    """Returns modeled surface conditions for a selected Mars coordinate."""
+    if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+        raise HTTPException(
+            status_code=422,
+            detail="Latitude must be between -90 and 90 and longitude between -180 and 180.",
+        )
+    try:
+        return get_site_conditions(lat, lon)
+    except SurvivalDataUnavailable as error:
+        logger.warning("Mars climate model unavailable: %s", error)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.get("/api/survival-guide/references")
+def get_survival_guide_references():
+    """Returns sourced mission-planning and site-hazard reference cards."""
+    return SURVIVAL_REFERENCE_CARDS
+
+
 # Mount static files if the directory exists
 static_dir = os.path.join(os.path.dirname(__file__), "static")
+frontend_assets_dir = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "frontend")
+)
 if os.path.exists(static_dir):
+    if os.path.exists(frontend_assets_dir):
+        app.mount(
+            "/survival-assets",
+            StaticFiles(directory=frontend_assets_dir),
+            name="survival-assets",
+        )
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     @app.get("/")

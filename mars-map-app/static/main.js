@@ -659,6 +659,20 @@ function removeTransientMarker() {
   activeTransientMarkerId = null;
 }
 
+function updateSurvivalGuideLocation(location) {
+  window.dispatchEvent(
+    new CustomEvent("mars-location-selected", {
+      detail: {
+        lat: location.lat,
+        lon: location.lon,
+        name: location.name,
+        waterSummary: location.water_summary || "",
+        minerals: location.minerals || []
+      }
+    })
+  );
+}
+
 function selectLocation(loc, fly3D = true) {
   if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lon)) return;
   if (activeTransientMarkerId !== loc.id) removeTransientMarker();
@@ -668,6 +682,7 @@ function selectLocation(loc, fly3D = true) {
   }
 
   selectedLocationId = loc.id;
+  updateSurvivalGuideLocation(loc);
   document.querySelectorAll("#location-list button[data-location-id]").forEach((button) => {
     const selected = button.dataset.locationId === loc.id;
     button.setAttribute("aria-pressed", selected ? "true" : "false");
@@ -786,6 +801,13 @@ function setManualMarsPosition() {
   }
 
   currentMarsPosition = { lat, lon };
+  updateSurvivalGuideLocation({
+    lat,
+    lon,
+    name: "Manual Mars coordinates",
+    water_summary: "",
+    minerals: []
+  });
   currentPositionPin.position.copy(latLonToVec3(lat, lon, MARS_RADIUS + 0.05));
   currentPositionPin.visible = true;
 
@@ -961,6 +983,8 @@ const pane2D = document.getElementById("pane-2d");
 const workspacePanels = document.getElementById("workspace-panels");
 const leftColumn = document.getElementById("workspace-left-column");
 const datasetSidebar = document.getElementById("dataset-sidebar");
+const survivalGuide = document.getElementById("survival-guide");
+const survivalGuideButton = document.getElementById("act-survival-btn");
 let isDragging = false;
 let pane2DVisible = true;
 
@@ -1021,6 +1045,12 @@ function toggleSidebar() {
   updateLeftColumnLayout();
 }
 
+function toggleSurvivalGuide() {
+  const isVisible = !survivalGuide.classList.toggle("hidden");
+  survivalGuideButton.classList.toggle("is-active", isVisible);
+  survivalGuideButton.setAttribute("aria-pressed", String(isVisible));
+}
+
 function updateLeftColumnLayout() {
   const sidebarVisible = !datasetSidebar.classList.contains("hidden");
   const mapVisible = !pane2D.classList.contains("hidden");
@@ -1034,6 +1064,7 @@ document.getElementById("btn-reopen-container").addEventListener("click", toggle
 
 document.getElementById("act-data-btn").addEventListener("click", toggleSidebar);
 document.getElementById("btn-close-sidebar").addEventListener("click", toggleSidebar);
+survivalGuideButton.addEventListener("click", toggleSurvivalGuide);
 
 document.getElementById("btn-auto-rotate").addEventListener("click", () => {
   controls.autoRotate = !controls.autoRotate;

@@ -1,189 +1,191 @@
-const statusColors = {
-  nominal: '#35C5D5',
-  warning: '#FFC857',
-  info: '#E76F32'
+let activeSite = null
+let activeRequest = null
+
+function createTextElement(tag, className, text) {
+  const element = document.createElement(tag)
+  if (className) element.className = className
+  element.textContent = text
+  return element
 }
 
-const icons = {
-  oxygen: '○',
-  water: '◈',
-  temperature: '◇',
-  radiation: '◉',
-  dust: '◫',
-  gravity: '◎',
-  wind: '◆',
-  pressure: '◆'
+function formatCoordinate(value, axis) {
+  const direction = axis === 'latitude'
+    ? (value >= 0 ? 'N' : 'S')
+    : (value >= 0 ? 'E' : 'W')
+  return `${Math.abs(value).toFixed(4)}° ${direction}`
 }
 
-async function fetchVitals() {
-  try {
-    const res = await fetch('http://localhost:8000/vitals')
-    const data = await res.json()
-    renderVitals(data)
-    checkThresholds(data)
-  } catch (err) {
-    renderVitalsError()
+function updateSelectedPosition(site) {
+  const position = document.getElementById('survival-position')
+  position.replaceChildren()
+  position.appendChild(createTextElement('span', '', site.name || 'Selected Mars location'))
+  position.appendChild(
+    createTextElement(
+      'span',
+      'survival-position-coordinates',
+      `${formatCoordinate(site.lat, 'latitude')} · ${formatCoordinate(site.lon, 'longitude')}`
+    )
+  )
+}
+
+function createMetric(label, value, unit, note) {
+  const card = createTextElement('article', 'survival-vital', '')
+  card.appendChild(createTextElement('div', 'survival-vital-label', label))
+  const number = createTextElement('div', 'survival-vital-value', '')
+  number.appendChild(createTextElement('span', '', value))
+  number.appendChild(createTextElement('span', 'survival-vital-unit', unit))
+  card.appendChild(number)
+  const meta = createTextElement('div', 'survival-vital-meta', '')
+  meta.appendChild(createTextElement('span', 'survival-vital-note', note))
+  meta.appendChild(createTextElement('span', 'survival-source', 'MCD'))
+  card.appendChild(meta)
+  return card
+}
+
+function requireFinite(value, label) {
+  if (!Number.isFinite(value)) {
+    throw new Error(`The climate model did not return ${label}.`)
   }
+  return value
 }
 
 function renderVitals(data) {
   const section = document.getElementById('vitals-section')
-  const entries = Object.entries(data)
+  section.replaceChildren()
+  section.appendChild(createTextElement('p', 'survival-section-title', 'SITE CONDITIONS'))
 
-  const html = `
-    <p class="text-mars text-xs font-semibold tracking-widest mb-2">EVA VITALS</p>
-    <div class="grid grid-cols-2 gap-2">
-      ${entries.map(([key, v]) => `
-        <div class="bg-space border border-white/5 rounded-lg p-3 flex flex-col gap-1">
-          <div class="flex items-center gap-1.5">
-            <span style="color: ${statusColors[v.status] || '#F2F4F7'}" class="text-xs">
-              ${icons[key] || '◆'}
-            </span>
-            <span class="text-offwhite/50 text-xs font-medium flex-1 truncate">
-              ${v.label}
-            </span>
-            <span
-              class="w-1.5 h-1.5 rounded-full shrink-0"
-              style="background: ${statusColors[v.status] || '#F2F4F7'}"
-            ></span>
-          </div>
-          <div class="flex items-baseline gap-1">
-            <span class="text-offwhite font-bold text-xl leading-none">${v.value}</span>
-            <span class="text-offwhite/40 text-xs">${v.unit}</span>
-          </div>
-          <div class="flex items-center justify-between mt-0.5">
-            <p class="text-offwhite/35 text-xs leading-snug flex-1">${v.note}</p>
-            <span class="text-xs px-1 py-0.5 rounded ml-1 shrink-0 ${
-              v.source === 'nasa'
-                ? 'text-cyan bg-cyan/10'
-                : 'text-offwhite/25 bg-white/5'
-            }">
-              ${v.source === 'nasa' ? 'NASA' : 'SIM'}
-            </span>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `
+  const surface = data.surface
+  const metrics = [
+    ['Surface temperature', requireFinite(surface.temperature_c, 'surface temperature').toFixed(1), '°C', 'Modeled at the local surface'],
+    ['Surface pressure', requireFinite(surface.pressure_pa, 'surface pressure').toFixed(1), 'Pa', 'Modeled at the local surface'],
+    ['Wind speed', requireFinite(surface.wind_speed_mps, 'wind speed').toFixed(1), 'm/s', 'Modeled horizontal wind'],
+    ['Dust optical depth', requireFinite(surface.dust_optical_depth, 'dust opacity').toFixed(3), 'τ', 'Seasonal model average'],
+    ['Incident sunlight', requireFinite(surface.solar_flux_wm2, 'solar flux').toFixed(1), 'W/m²', 'Model input, not usable power']
+  ]
+  const grid = createTextElement('div', 'survival-vitals-grid', '')
+  metrics.forEach(([label, value, unit, note]) => {
+    grid.appendChild(createMetric(label, value, unit, note))
+  })
+  section.appendChild(grid)
 
-  section.innerHTML = html
+  const model = data.model
+  const localTime = Number(model.local_time_hours).toFixed(1)
+  const description =
+    `${model.name} · ${model.scenario} · Ls ${Number(model.solar_longitude_deg).toFixed(1)}° · ` +
+    `local solar time ${localTime}h. ${model.disclaimer}`
+  section.appendChild(createTextElement('p', 'survival-model-note', description))
 
-  let alertBox = document.getElementById('alert-box')
-  if (!alertBox) {
-    alertBox = document.createElement('div')
-    alertBox.id = 'alert-box'
-  }
-  section.prepend(alertBox)
+  renderAtmosphere(data.gases)
+  document.getElementById('model-state').textContent = 'MODELED'
+  document.getElementById('model-updated').textContent =
+    `Updated ${new Date(model.computed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
-function renderVitalsError() {
+function formatGas(gas) {
+  const mixingRatio = requireFinite(gas.mixing_ratio, `${gas.label} mixing ratio`)
+  const percent = mixingRatio * 100
+  if (percent >= 0.01) {
+    return { value: percent.toPrecision(3), unit: '% vol' }
+  }
+  return { value: (mixingRatio * 1000000).toPrecision(3), unit: 'ppmv' }
+}
+
+function renderAtmosphere(gases) {
+  const section = document.getElementById('atmosphere-section')
+  section.replaceChildren()
+  section.appendChild(
+    createTextElement('p', 'survival-section-title', 'ATMOSPHERIC GASES · MODEL')
+  )
+  section.appendChild(
+    createTextElement(
+      'p',
+      'survival-data-note',
+      'Volume mixing ratios at the selected site and modeled time; trace gases are shown in ppmv. These are not live sensor readings.'
+    )
+  )
+
+  const grid = createTextElement('div', 'survival-gas-grid', '')
+  gases.forEach(gas => {
+    const formatted = formatGas(gas)
+    const card = createTextElement('article', 'survival-gas-card', '')
+    card.appendChild(createTextElement('div', 'survival-gas-name', gas.label))
+    const value = createTextElement('div', 'survival-gas-value', '')
+    value.appendChild(createTextElement('span', '', formatted.value))
+    value.appendChild(createTextElement('span', 'survival-gas-unit', ` ${formatted.unit}`))
+    card.appendChild(value)
+    grid.appendChild(card)
+  })
+  section.appendChild(grid)
+  section.appendChild(
+    createTextElement(
+      'div',
+      'survival-warning',
+      'Mars surface air is not breathable. This climatology is not a toxic-exposure assessment or a substitute for suit and habitat life support.'
+    )
+  )
+}
+
+function renderVitalsError(error) {
   const section = document.getElementById('vitals-section')
-  section.innerHTML = `
-    <p class="text-mars text-xs font-semibold tracking-widest mb-2">EVA VITALS</p>
-    <div class="bg-space border border-amber/20 rounded-lg p-4 text-center">
-      <p class="text-amber text-xs font-medium">Cannot reach backend</p>
-      <p class="text-offwhite/30 text-xs mt-1">Make sure server.py is running</p>
-      <button
-        onclick="fetchVitals()"
-        class="mt-3 px-3 py-1.5 bg-mars/10 border border-mars/30 rounded text-mars text-xs font-medium hover:bg-mars/20 transition-colors"
-      >
-        Retry
-      </button>
-    </div>
-  `
+  section.replaceChildren()
+  section.appendChild(createTextElement('p', 'survival-section-title', 'SITE CONDITIONS'))
+  const panel = createTextElement('div', 'survival-error', '')
+  panel.setAttribute('role', 'status')
+  panel.appendChild(createTextElement('p', 'survival-error-title', 'Site model unavailable'))
+  panel.appendChild(
+    createTextElement(
+      'p',
+      'survival-error-message',
+      `${error.message} No live or estimated values are being substituted.`
+    )
+  )
+  panel.appendChild(
+    createTextElement('button', 'survival-retry', 'Retry climate model')
+  )
+  panel.lastChild.type = 'button'
+  panel.lastChild.dataset.retrySite = 'true'
+  section.appendChild(panel)
+  document.getElementById('atmosphere-section').replaceChildren()
+  document.getElementById('model-state').textContent = 'UNAVAILABLE'
+  document.getElementById('model-updated').textContent = 'No model data'
 }
 
-function checkThresholds(data) {
-  const warnings = []
+async function fetchSiteConditions(site) {
+  activeSite = site
+  if (activeRequest) activeRequest.abort()
+  activeRequest = new AbortController()
+  document.getElementById('model-state').textContent = 'LOADING'
+  document.getElementById('model-updated').textContent = 'Querying MCD'
 
-  if (data.oxygen && data.oxygen.value < 19.5) {
-    warnings.push({
-      label: 'OXYGEN LOW',
-      value: `${data.oxygen.value}%`,
-      color: '#FFC857'
-    })
-  }
+  const params = new URLSearchParams({
+    lat: String(site.lat),
+    lon: String(site.lon)
+  })
 
-  if (data.oxygen && data.oxygen.value < 16) {
-    warnings.push({
-      label: 'OXYGEN CRITICAL',
-      value: `${data.oxygen.value}%`,
-      color: '#FF4444'
-    })
-  }
-
-  if (data.wind && data.wind.value > 10) {
-    warnings.push({
-      label: 'HIGH WINDS',
-      value: `${data.wind.value} m/s`,
-      color: '#FFC857'
-    })
-  }
-
-  if (data.temperature && data.temperature.value < -80) {
-    warnings.push({
-      label: 'EXTREME COLD',
-      value: `${data.temperature.value}°C`,
-      color: '#FFC857'
-    })
-  }
-
-  renderAlerts(warnings)
-}
-
-function renderAlerts(warnings) {
-  let alertBox = document.getElementById('alert-box')
-  if (!alertBox) {
-    alertBox = document.createElement('div')
-    alertBox.id = 'alert-box'
-    const vitalsSection = document.getElementById('vitals-section')
-    vitalsSection.prepend(alertBox)
-  }
-
-  if (warnings.length === 0) {
-    alertBox.innerHTML = `
-      <div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-white/5 bg-space mb-3">
-        <span class="w-1.5 h-1.5 rounded-full bg-cyan shrink-0"></span>
-        <span class="text-cyan text-xs font-medium">All systems nominal</span>
-      </div>
-    `
-    return
-  }
-
-  alertBox.innerHTML = `
-    <div class="flex flex-col gap-1.5 mb-3">
-      ${warnings.map(w => `
-        <div
-          class="flex items-center gap-2 px-3 py-2 rounded-lg border"
-          style="background: ${w.color}10; border-color: ${w.color}40;"
-        >
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse" style="background: ${w.color}"></span>
-          <span class="text-xs font-bold tracking-wider flex-1" style="color: ${w.color}">${w.label}</span>
-          <span class="text-xs font-semibold" style="color: ${w.color}">${w.value}</span>
-        </div>
-      `).join('')}
-    </div>
-  `
-}
-
-async function fetchStatus() {
   try {
-    const res = await fetch('http://localhost:8000/status')
-    const data = await res.json()
-    document.getElementById('sol-display').textContent = `SOL ${data.sol}`
-    if (data.last_updated) {
-      const date = new Date(data.last_updated * 1000)
-      const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      document.getElementById('last-updated').textContent = `updated ${time}`
-    } else {
-      document.getElementById('last-updated').textContent = 'live'
+    const response = await fetch(`/api/survival-guide?${params}`, {
+      signal: activeRequest.signal
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.detail || `Climate model request failed (${response.status})`)
     }
-  } catch (err) {
-    document.getElementById('sol-display').textContent = 'SOL --'
-    document.getElementById('last-updated').textContent = 'offline'
+    renderVitals(data)
+  } catch (error) {
+    if (error.name === 'AbortError') return
+    renderVitalsError(error)
   }
 }
-fetchStatus()
-fetchVitals()
-setInterval(fetchVitals, 30000)
-setInterval(fetchStatus, 30000)
+
+window.addEventListener('mars-location-selected', event => {
+  const site = event.detail
+  if (!site || !Number.isFinite(site.lat) || !Number.isFinite(site.lon)) return
+  updateSelectedPosition(site)
+  fetchSiteConditions(site)
+})
+
+document.getElementById('vitals-section').addEventListener('click', event => {
+  if (event.target.closest('[data-retry-site]') && activeSite) {
+    fetchSiteConditions(activeSite)
+  }
+})
